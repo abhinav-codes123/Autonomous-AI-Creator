@@ -20,6 +20,7 @@ from app.services.editorial.editorial_engine import EditorialEngine
 from app.services.llm import get_llm_provider
 from app.services.memory.memory_engine import MemoryEngine
 from app.services.persona.persona_engine import PersonaEngine
+from app.utils.text_similarity import calculate_similarity
 
 
 class FallbackTopicProvider(TopicProvider):
@@ -113,7 +114,22 @@ class PublishingService:
 
         logger.info(f"Discovered {len(all_discovered)} potential topics.")
 
-        scored_candidates: list[tuple[TopicData, float]] = []
+        # Multi-Source Clustering: Map duplicate stories across providers to aggregate sources
+        source_clusters: dict[str, list[str]] = {}
+        for topic in all_discovered:
+            cluster_found = False
+            for primary_url, sources in source_clusters.items():
+                # Find matching primary topic in current batch
+                matching_topic = next((t for t in all_discovered if t.url == primary_url), None)
+                if matching_topic and calculate_similarity(topic.title, matching_topic.title) >= 0.65:
+                    if topic.url not in sources:
+                        sources.append(topic.url)
+                    cluster_found = True
+                    break
+            if not cluster_found:
+                source_clusters[topic.url] = [topic.url]
+
+        scored_candidates: list[tuple[TopicData, float, list[str]]] = []
 
         # Step 2 & 3: Editorial Filtering & Memory Similarity Check
         for topic_data in all_discovered:
@@ -146,7 +162,8 @@ class PublishingService:
                 await self.topic_repo.mark_rejected(db_topic, reason=reason)
                 logger.info(f"Rejected topic '{topic_data.title[:50]}': {reason}")
             else:
-                scored_candidates.append((topic_data, editorial_score.final_score))
+                aggregated_sources = source_clusters.get(topic_data.url, [topic_data.url])
+                scored_candidates.append((topic_data, editorial_score.final_score, aggregated_sources))
 
         if not scored_candidates:
             logger.warning(f"No suitable topics passed editorial filtering for agent {agent.name}.")
@@ -154,7 +171,7 @@ class PublishingService:
 
         # Pick top scoring candidate topic
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
-        best_topic, best_score = scored_candidates[0]
+        best_topic, best_score, aggregated_sources = scored_candidates[0]
         logger.info(f"Selected best topic for post generation: '{best_topic.title}' (score: {best_score})")
 
         # Step 4: Fetch recent posts for memory context & construct prompt
@@ -168,14 +185,14 @@ class PublishingService:
         # Step 5: Generate post with LLM Provider
         generated = await self.llm_provider.generate(prompt)
 
-        sources = generated.sources if generated.sources else [best_topic.url]
+        final_sources = list(dict.fromkeys((generated.sources or []) + aggregated_sources))
 
         # Step 6: Persist Post and update Topic status in DB
         post = await self.post_repo.create_post(
             agent_id=agent.id,
             text=generated.text,
             rationale=generated.rationale,
-            sources=sources,
+            sources=final_sources,
         )
 
         # Mark topic as published
