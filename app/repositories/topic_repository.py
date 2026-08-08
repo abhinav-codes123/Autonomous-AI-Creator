@@ -3,6 +3,7 @@
 import uuid
 from typing import Sequence
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.topic import Topic, TopicStatus
 from app.models.rejected_topic import RejectedTopic
@@ -13,7 +14,7 @@ class TopicRepository:
         self.session = session
 
     async def get_by_url(self, url: str) -> Topic | None:
-        stmt = select(Topic).where(Topic.url == url)
+        stmt = select(Topic).options(selectinload(Topic.rejected_info)).where(Topic.url == url)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -44,21 +45,56 @@ class TopicRepository:
             status=status,
         )
         self.session.add(topic)
-        await self.session.commit()
-        await self.session.refresh(topic)
-        return topic
+        try:
+            await self.session.commit()
+            await self.session.refresh(topic)
+            return topic
+        except Exception:
+            await self.session.rollback()
+            existing_again = await self.get_by_url(url)
+            if existing_again:
+                existing_again.title = title
+                existing_again.summary = summary
+                existing_again.score = score
+                existing_again.status = status
+                await self.session.commit()
+                return existing_again
+            raise
 
     async def mark_rejected(self, topic: Topic, reason: str) -> RejectedTopic:
         topic.status = TopicStatus.REJECTED
+
+        # Check if RejectedTopic record already exists
+        stmt = select(RejectedTopic).where(RejectedTopic.topic_id == topic.id)
+        result = await self.session.execute(stmt)
+        existing_rejected = result.scalar_one_or_none()
+
+        if existing_rejected:
+            existing_rejected.reason = reason
+            await self.session.commit()
+            await self.session.refresh(existing_rejected)
+            return existing_rejected
+
         rejected = RejectedTopic(
             id=uuid.uuid4(),
             topic_id=topic.id,
             reason=reason,
         )
         self.session.add(rejected)
-        await self.session.commit()
-        await self.session.refresh(rejected)
-        return rejected
+        try:
+            await self.session.commit()
+            await self.session.refresh(rejected)
+            return rejected
+        except Exception:
+            await self.session.rollback()
+            stmt_retry = select(RejectedTopic).where(RejectedTopic.topic_id == topic.id)
+            res_retry = await self.session.execute(stmt_retry)
+            existing_retry = res_retry.scalar_one_or_none()
+            if existing_retry:
+                existing_retry.reason = reason
+                await self.session.commit()
+                return existing_retry
+            raise
 
     async def mark_published(self, topic: Topic) -> Topic:
         topic.status = TopicStatus.PUBLISHED
