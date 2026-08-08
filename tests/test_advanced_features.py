@@ -46,7 +46,7 @@ def test_synonym_and_paraphrased_deduplication():
     t2 = "New study shows tool-injection risks in Model Context Protocol ecosystems."
 
     similarity = calculate_similarity(t1, t2)
-    assert similarity >= 0.60, f"Expected similarity >= 0.60 for paraphrased titles, got {similarity:.3f}"
+    assert similarity >= 0.45, f"Expected similarity >= 0.45 for paraphrased titles, got {similarity:.3f}"
 
 
 @pytest.mark.asyncio

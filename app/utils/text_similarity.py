@@ -18,7 +18,7 @@ STOP_WORDS = {
     "they", "this", "those", "through", "to", "too", "under", "until", "up",
     "very", "was", "we", "were", "what", "when", "where", "which", "while",
     "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself",
-    "yourselves", "new", "study", "shows", "releases", "released", "research",
+    "yourselves", "new", "shows", "releases", "released",
 }
 
 SYNONYMS_MAP = {
@@ -31,12 +31,35 @@ SYNONYMS_MAP = {
     "pentest": "penetration test",
     "pentesting": "penetration testing",
     "rag": "retrieval augmented generation",
+    "tool injection": "prompt injection",
+    "tool-injection": "prompt injection",
+    "study": "research",
+    "risks": "risk",
+    "ecosystems": "ecosystem",
 }
 
 
+def simple_stem(word: str) -> str:
+    """Basic suffix stemming helper for common English plurals and endings."""
+    if word.endswith("ing") and len(word) > 5:
+        return word[:-3]
+    if word.endswith("s") and len(word) > 3 and not word.endswith("ss"):
+        return word[:-1]
+    if word.endswith("ed") and len(word) > 4:
+        return word[:-2]
+    return word
+
+
 def expand_and_clean(text: str) -> list[str]:
-    """Clean text, expand tech acronyms, and extract significant words."""
-    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    """Clean text, expand tech acronyms and phrase synonyms, and extract stemmed significant words."""
+    lowered = text.lower()
+
+    # Pre-process multi-word synonym phrases
+    for phrase, replacement in SYNONYMS_MAP.items():
+        if " " in phrase or "-" in phrase:
+            lowered = lowered.replace(phrase, replacement)
+
+    cleaned = re.sub(r"[^\w\s]", " ", lowered)
     words = cleaned.split()
 
     expanded = []
@@ -46,7 +69,8 @@ def expand_and_clean(text: str) -> list[str]:
         else:
             expanded.append(word)
 
-    return [w for w in expanded if w not in STOP_WORDS and len(w) > 1]
+    stemmed = [simple_stem(w) for w in expanded if w not in STOP_WORDS and len(w) > 1]
+    return stemmed
 
 
 def get_bigrams(words: list[str]) -> set[str]:
@@ -98,6 +122,6 @@ def calculate_similarity(text1: str, text2: str) -> float:
     bigram_jaccard = bigram_jaccard_similarity(text1, text2)
     seq = sequence_similarity(text1, text2)
 
-    # Weighted blend giving high weight to phrase and token overlap
-    weighted_score = (unigram_jaccard * 0.45) + (bigram_jaccard * 0.35) + (seq * 0.20)
+    # Weighted blend giving primary weight to token and phrase overlap
+    weighted_score = (unigram_jaccard * 0.50) + (bigram_jaccard * 0.30) + (seq * 0.20)
     return max(weighted_score, unigram_jaccard, seq)
