@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import StatusBadge from './StatusBadge';
 import { getGreeting, secondsSince } from '../utils/format';
 
-function Header({ persona, showLive, lastChecked }) {
+function Header({ persona, showLive, lastChecked, onDisconnect }) {
   const [syncSeconds, setSyncSeconds] = useState(() => secondsSince(lastChecked));
 
   useEffect(() => {
@@ -31,6 +31,16 @@ function Header({ persona, showLive, lastChecked }) {
         <StatusBadge label="AUTONOMOUS" variant="green" pulse />
         {showLive && <StatusBadge label="LIVE" variant="live" pulse />}
         <span className="dashboard-header__sync">{syncLabel}</span>
+        {onDisconnect && (
+          <button
+            type="button"
+            className="connect-agent__button"
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', marginLeft: '0.5rem' }}
+            onClick={onDisconnect}
+          >
+            + New Agent
+          </button>
+        )}
       </div>
     </header>
   );

@@ -10,7 +10,9 @@ import {
   buildLiveActivity,
   buildLiveEditorial,
   buildLiveMetrics,
+  clearAgentSession,
   fetchFeed,
+  fetchStats,
   getDemoFeed,
   getDemoMetrics,
   DEMO_ACTIVITY,
@@ -78,6 +80,7 @@ function App() {
   const [persona, setPersona] = useState(initial.persona);
   const [connected, setConnected] = useState(initial.connected);
   const [posts, setPosts] = useState(initial.posts);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(initial.loading);
   const [error, setError] = useState(false);
   const [isPolling, setIsPolling] = useState(initial.isPolling);
@@ -114,15 +117,24 @@ function App() {
 
     async function loadFeed() {
       try {
-        const data = await fetchFeed(agentId);
+        const [feedData, statsData] = await Promise.all([
+          fetchFeed(agentId),
+          fetchStats(agentId),
+        ]);
+
         if (cancelled) return;
 
-        const incoming = data.posts || [];
+        const incoming = feedData.posts || [];
         setPosts((prev) => {
           const { posts: merged, newIds } = mergePosts(prev, incoming);
           markNewPosts(newIds);
           return merged;
         });
+
+        if (statsData) {
+          setStats(statsData);
+        }
+
         setLastChecked(new Date());
         setError(false);
       } catch {
@@ -178,15 +190,24 @@ function App() {
     }
   }
 
+  function handleDisconnect() {
+    clearAgentSession();
+    setConnected(false);
+    setAgentId(null);
+    setPosts([]);
+    setStats(null);
+    setIsPolling(false);
+  }
+
   const metrics = useMemo(() => {
     if (isDemo) return getDemoMetrics(posts.length);
-    return buildLiveMetrics(posts.length);
-  }, [isDemo, posts.length]);
+    return buildLiveMetrics(stats, posts.length);
+  }, [isDemo, stats, posts.length]);
 
   const editorialStats = useMemo(() => {
     if (isDemo) return DEMO_EDITORIAL;
-    return buildLiveEditorial(posts.length);
-  }, [isDemo, posts.length]);
+    return buildLiveEditorial(stats, posts.length);
+  }, [isDemo, stats, posts.length]);
 
   const activityItems = useMemo(() => {
     if (isDemo) return DEMO_ACTIVITY;
@@ -271,6 +292,7 @@ function App() {
           persona={persona}
           showLive={isPolling}
           lastChecked={lastChecked}
+          onDisconnect={handleDisconnect}
         />
 
         <div className="dashboard">

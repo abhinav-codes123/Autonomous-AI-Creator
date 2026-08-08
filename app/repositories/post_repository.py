@@ -2,7 +2,7 @@
 
 import uuid
 from typing import Sequence
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.post import Post
@@ -65,3 +65,8 @@ class PostRepository:
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def count_posts_by_agent(self, agent_id: uuid.UUID) -> int:
+        stmt = select(func.count(Post.id)).where(Post.agent_id == agent_id)
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0

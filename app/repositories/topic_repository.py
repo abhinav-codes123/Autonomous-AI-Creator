@@ -2,7 +2,7 @@
 
 import uuid
 from typing import Sequence
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.topic import Topic, TopicStatus
@@ -45,9 +45,21 @@ class TopicRepository:
             status=status,
         )
         self.session.add(topic)
-        await self.session.commit()
-        await self.session.refresh(topic)
-        return topic
+        try:
+            await self.session.commit()
+            await self.session.refresh(topic)
+            return topic
+        except Exception:
+            await self.session.rollback()
+            existing_again = await self.get_by_url(url)
+            if existing_again:
+                existing_again.title = title
+                existing_again.summary = summary
+                existing_again.score = score
+                existing_again.status = status
+                await self.session.commit()
+                return existing_again
+            raise
 
     async def mark_rejected(self, topic: Topic, reason: str) -> RejectedTopic:
         topic.status = TopicStatus.REJECTED
@@ -69,9 +81,20 @@ class TopicRepository:
             reason=reason,
         )
         self.session.add(rejected)
-        await self.session.commit()
-        await self.session.refresh(rejected)
-        return rejected
+        try:
+            await self.session.commit()
+            await self.session.refresh(rejected)
+            return rejected
+        except Exception:
+            await self.session.rollback()
+            stmt_retry = select(RejectedTopic).where(RejectedTopic.topic_id == topic.id)
+            res_retry = await self.session.execute(stmt_retry)
+            existing_retry = res_retry.scalar_one_or_none()
+            if existing_retry:
+                existing_retry.reason = reason
+                await self.session.commit()
+                return existing_retry
+            raise
 
     async def mark_published(self, topic: Topic) -> Topic:
         topic.status = TopicStatus.PUBLISHED
@@ -83,3 +106,13 @@ class TopicRepository:
         stmt = select(Topic).order_by(Topic.discovered_at.desc()).limit(limit)
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def count_all_topics(self) -> int:
+        stmt = select(func.count(Topic.id))
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
+
+    async def count_rejected_topics(self) -> int:
+        stmt = select(func.count(RejectedTopic.id))
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
