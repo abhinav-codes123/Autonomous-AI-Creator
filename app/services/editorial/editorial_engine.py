@@ -43,7 +43,7 @@ class EditorialEngine:
         "Google DeepMind", "GitHub Trending", "MIT Tech Review AI",
     }
 
-    def __init__(self, min_score_threshold: float = 20.0) -> None:
+    def __init__(self, min_score_threshold: float = 15.0) -> None:
         self.min_score_threshold = min_score_threshold
 
     def evaluate_topic(
@@ -77,11 +77,18 @@ class EditorialEngine:
                 )
 
         # 2. Score Components (0-10 each)
-        # Persona Fit: Check matching domain keywords
+        # Persona Fit: Token overlap + keyword bonus
+        domain_tokens = set(re.sub(r"[^\w\s]", "", persona.domain.lower()).split())
+        text_tokens = set(re.sub(r"[^\w\s]", "", text).split())
         matched_keywords = sum(1 for kw in persona.keywords if kw.lower() in text)
-        persona_fit = min(10.0, 3.0 + (matched_keywords * 2.5))
-        if matched_keywords == 0 and persona.domain.lower() not in text:
-            persona_fit = 2.0
+
+        if matched_keywords > 0:
+            persona_fit = min(10.0, 6.0 + (matched_keywords * 2.0))
+        elif domain_tokens.intersection(text_tokens):
+            persona_fit = 7.0
+        else:
+            # Base persona fit for general technology/AI topics
+            persona_fit = 5.0
 
         # Credibility
         credibility = 9.0 if topic.source_name in self.HIGH_CREDIBILITY_SOURCES else 6.0
@@ -91,16 +98,16 @@ class EditorialEngine:
         pub_time = topic.published_time
         if pub_time.tzinfo is None:
             pub_time = pub_time.replace(tzinfo=timezone.utc)
-        hours_old = (now - pub_time).total_seconds() / 3600.0
+        hours_old = max(0.0, (now - pub_time).total_seconds() / 3600.0)
 
         if hours_old <= 12:
             recency = 10.0
         elif hours_old <= 24:
             recency = 8.0
         elif hours_old <= 48:
-            recency = 5.0
+            recency = 6.0
         else:
-            recency = 2.0
+            recency = 5.0
 
         # Importance & Novelty estimation
         importance = min(10.0, 5.0 + (matched_keywords * 1.5))
@@ -121,10 +128,10 @@ class EditorialEngine:
         if is_duplicate:
             is_accepted = False
             rejection_reason = "Already discussed"
-        elif persona_fit < 4.0:
+        elif persona_fit < 3.0:
             is_accepted = False
             rejection_reason = "Low relevance"
-        elif recency < 4.0:
+        elif recency < 3.0:
             is_accepted = False
             rejection_reason = "Old news"
         elif final_score < self.min_score_threshold:

@@ -3,6 +3,7 @@
 import uuid
 from typing import Sequence
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.topic import Topic, TopicStatus
 from app.models.rejected_topic import RejectedTopic
@@ -13,7 +14,7 @@ class TopicRepository:
         self.session = session
 
     async def get_by_url(self, url: str) -> Topic | None:
-        stmt = select(Topic).where(Topic.url == url)
+        stmt = select(Topic).options(selectinload(Topic.rejected_info)).where(Topic.url == url)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -50,6 +51,18 @@ class TopicRepository:
 
     async def mark_rejected(self, topic: Topic, reason: str) -> RejectedTopic:
         topic.status = TopicStatus.REJECTED
+
+        # Check if RejectedTopic record already exists
+        stmt = select(RejectedTopic).where(RejectedTopic.topic_id == topic.id)
+        result = await self.session.execute(stmt)
+        existing_rejected = result.scalar_one_or_none()
+
+        if existing_rejected:
+            existing_rejected.reason = reason
+            await self.session.commit()
+            await self.session.refresh(existing_rejected)
+            return existing_rejected
+
         rejected = RejectedTopic(
             id=uuid.uuid4(),
             topic_id=topic.id,
