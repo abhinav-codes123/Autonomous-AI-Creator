@@ -1,150 +1,167 @@
-# Autonomous AI Persona Backend (Python)
+# Autonomous AI Persona & Content Creator Dashboard
 
-Production-quality autonomous AI content creator backend built with **Python 3.12+**, **FastAPI**, **SQLAlchemy 2.0 (Async)**, **PostgreSQL**, **Alembic**, **APScheduler**, and **Pydantic v2**.
+A production-quality, full-stack autonomous AI content creator application featuring a **FastAPI (Python 3.12+) Backend** and a **React + Vite Dashboard Frontend**.
 
-The system operates autonomously without human prompts after initialization, generating technical persona-aligned posts on a background schedule and serving them via a read-only feed API.
-
----
-
-## System Architecture & Features
-
-```
-Discover Topics (HN, GitHub, arXiv, RSS)
-                 │
-                 ▼
-       Editorial Filtering
-     (Scoring & Rule Checking)
-                 │
-                 ▼
-          Memory Engine
- (DB Deduplication & Similarity Check)
-                 │
-                 ▼
-          Prompt Builder
-      (Persona + Style Rules)
-                 │
-                 ▼
-           LLM Provider
-     (OpenAI / Interchangeable)
-                 │
-                 ▼
-            Store Post
-         (PostgreSQL DB)
-```
-
-1. **Autonomous Background Scheduler (`APScheduler`)**:
-   - Runs the discovery-editorial-memory-publishing pipeline automatically every 30 minutes (configurable).
-   - Starts upon agent initialization (`POST /api/agent/init`) or system startup.
-
-2. **Topic Discovery Services**:
-   - Abstract `TopicProvider` interface (`async def fetch_topics(self)`).
-   - Implementations: Hacker News API, GitHub Trending / Search, arXiv API, RSS Feeds (OpenAI, Anthropic, DeepMind, TechCrunch).
-
-3. **Editorial Engine**:
-   - Scores topics across 6 dimensions: Importance, Novelty, Credibility, Persona Fit, Recency, and Duplicate Penalty.
-   - Rejects clickbait, promotional content, old news, and low-relevance topics.
-   - Stores rejected topics in PostgreSQL with detailed rejection reasons.
-
-4. **Persona Engine**:
-   - Dynamic persona profiling for any domain (with built-in optimized default for **AI Security**).
-   - Defines domain keywords (e.g. Prompt Injection, Red Teaming, CVEs), tone, vocabulary, and strict style rules (e.g. No emojis, No hype, Evidence-driven).
-
-5. **Memory System**:
-   - Persists published posts, covered topics, and rejected topics in PostgreSQL.
-   - Performs text similarity checks (Jaccard + Sequence matcher) against existing history before publishing to prevent duplicates.
-
-6. **Prompt Builder & LLM Abstraction**:
-   - Constructs structured, context-aware prompts.
-   - `LLMProvider` abstraction supporting OpenAI API and high-quality Mock provider for testing and offline fallback environments.
-
-7. **Strict API Contracts**:
-   - `POST /api/agent/init`: Initializes agent and starts autonomous cycle.
-   - `GET /api/agent/feed?agentId=<uuid>`: Reads persisted posts sorted **Newest First**. *Never triggers content generation on GET.*
+The system operates autonomously without human prompts after initialization. The background pipeline continuously discovers trending tech topics, evaluates them via an Editorial Engine, checks memory history in PostgreSQL/SQLite for deduplication, synthesizes persona-aligned commentary via LLM abstractions, and serves real-time updates to an interactive web dashboard.
 
 ---
 
-## API Endpoints
+## 🌟 Full-Stack Architecture
+
+```
+                               ┌────────────────────────────────────────┐
+                               │   React + Vite Frontend Dashboard      │
+                               │  (Live Feed, Editorial Scores, Status) │
+                               └───────────────────┬────────────────────┘
+                                                   │ HTTP / REST
+                                                   ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              FastAPI Backend (Python 3.12+)                            │
+│                                                                                        │
+│  ┌─────────────────────────┐      ┌──────────────────────┐      ┌──────────────────┐   │
+│  │   POST /api/agent/init  │──────►  Autonomous Scheduler │ ───► │ Topic Discovery  │   │
+│  │   GET  /api/agent/feed  │      │     (APScheduler)    │      │ (HN, GitHub,     │   │
+│  └─────────────────────────┘      └──────────────────────┘      │  arXiv, RSS)     │   │
+│                                                                 └─────────┬────────┘   │
+│                                                                           │            │
+│  ┌─────────────────────────┐      ┌──────────────────────┐                ▼            │
+│  │   LLM Provider Layer    │ ◄────┤   Prompt Builder     │      ┌──────────────────┐   │
+│  │ (OpenAI / Free Mock)    │      │(Persona & Style Rules│ ◄─── │ Editorial Engine │   │
+│  └────────────┬────────────┘      └──────────────────────┘      │(Scoring & Rules) │   │
+│               │                                                 └─────────▲────────┘   │
+│               ▼                                                           │            │
+│  ┌─────────────────────────┐                                    ┌─────────┴────────┐   │
+│  │   PostgreSQL / SQLite   │◄───────────────────────────────────┤  Memory Engine   │   │
+│  │   (Persisted Posts)     │                                    │  (Deduplication) │   │
+│  └─────────────────────────┘                                    └──────────────────┘   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Key Features
+
+### 🖥️ Frontend Dashboard (React + Vite)
+- **Interactive Agent Initialization**: Initialize personas (e.g., Ada in AI Security) dynamically.
+- **Real-Time Feed**: View autonomously generated technical posts with expandable selection rationales and direct source links.
+- **Editorial Judgment Panel**: Visual breakdown of topic evaluation scores across Importance, Novelty, Credibility, Persona Fit, Recency, and Penalty dimensions.
+- **Live Activity Log & Metrics**: Real-time status indicators, agent health, and discovery source breakdown.
+- **Dark Mode Aesthetic**: Sleek design built with glassmorphism, responsive cards, and clean typography.
+
+### ⚙️ Backend & Autonomous Core (FastAPI & Python 3.12+)
+- **Instant Initialization Response**: `POST /api/agent/init` creates agent records and synchronously generates the first post so `GET /feed` is populated immediately.
+- **Autonomous Background Scheduler (`APScheduler`)**: Runs periodic content generation cycles every 30 minutes without human intervention.
+- **Multi-Source Topic Discovery**:
+  - Hacker News API
+  - GitHub Trending Repositories
+  - arXiv Research Papers API
+  - RSS Feeds (OpenAI, Anthropic, DeepMind, TechCrunch)
+  - Offline Domain Fallback Provider
+- **Editorial Engine**:
+  - Evaluates topics across 6 criteria: *Importance*, *Novelty*, *Credibility*, *Persona Fit*, *Recency*, and *Duplicate Penalty*.
+  - Filters clickbait, promotional spam (word-boundary matched), and low-relevance topics.
+  - Persists rejected topics with explicit rejection reasons.
+- **Memory Engine**:
+  - Tracks published posts, covered topics, and keywords in PostgreSQL/SQLite.
+  - Employs Jaccard & Sequence matcher text similarity algorithms to prevent duplicate content.
+- **Persona Engine**:
+  - Dynamic domain profiling for any tech domain (defaults to **AI Security** with keywords like *Prompt Injection*, *Red Teaming*, *CVEs*, *LLM Security*).
+  - Enforces strict writing guidelines (No emojis, No hype, Technical precision).
+- **Pluggable LLM Abstraction Layer**:
+  - Supports OpenAI API (`gpt-4o`, `gpt-4o-mini`).
+  - Includes a 100% free built-in `MockLLMProvider` for offline execution and testing without API key costs.
+
+---
+
+## 📡 API Endpoints
 
 ### 1. Initialize Agent
-- **Endpoint**: `POST /api/agent/init`
+- **Method**: `POST /api/agent/init`
 - **Request Body**:
-```json
-{
-  "persona": {
-    "name": "Ada",
-    "domain": "AI Security"
+  ```json
+  {
+    "persona": {
+      "name": "Ada",
+      "domain": "AI Security"
+    }
   }
-}
-```
-- **Response**:
-```json
-{
-  "agentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-}
-```
+  ```
+- **Response** (200 OK):
+  ```json
+  {
+    "agentId": "acb1f79f-0c9f-4f81-aaec-a43b4f9a0ebf"
+  }
+  ```
 
 ### 2. Retrieve Agent Feed
-- **Endpoint**: `GET /api/agent/feed?agentId=3fa85f64-5717-4562-b3fc-2c963f66afa6`
-- **Response**:
-```json
-{
-  "posts": [
-    {
-      "id": "c7a6f23b-5a1e-4b9d-8d4e-2f1a9b3c4d5e",
-      "createdAt": "2026-08-08T02:00:00Z",
-      "text": "Technical Analysis of Zero-Day Prompt Injection Attacks...",
-      "rationale": "Selection Rationale: 1) Why selected... 2) Why relevant now... 3) Why chosen over alternatives...",
-      "sources": [
-        "https://arxiv.org/abs/2401.00001"
-      ]
-    }
-  ]
-}
-```
+- **Method**: `GET /api/agent/feed?agentId=acb1f79f-0c9f-4f81-aaec-a43b4f9a0ebf`
+- **Response** (200 OK - Newest First):
+  ```json
+  {
+    "posts": [
+      {
+        "id": "eb472147-197e-4074-b52b-67ee83c448d3",
+        "createdAt": "2026-08-08T13:11:24.904481+00:00",
+        "text": "Technical Analysis of 'Build a minimal clone of OpenAI’s Canvas, Operator'...",
+        "rationale": "Selection Rationale:\n1. Why selected...\n2. Why relevant now...\n3. Why chosen over alternatives...",
+        "sources": [
+          "https://news.ycombinator.com/item?id=43232049"
+        ]
+      }
+    ]
+  }
+  ```
 
 ---
 
-## Quickstart & Local Setup
+## 🛠️ Quickstart & Local Setup
 
 ### Prerequisites
-- Python 3.12+
-- Docker & Docker Compose (optional for PostgreSQL container)
+- **Python 3.12+**
+- **Node.js 18+** & npm
 
-### Setup Virtual Environment
+### 1. Backend Setup & Startup
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### Run Tests
-```bash
-pytest -v
-```
-
-### Run Server Locally
-```bash
+# Start FastAPI development server
 uvicorn app.main:app --reload --port 8000
 ```
+Backend API interactive docs will be available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+### 2. Frontend Setup & Startup
+In a new terminal window:
+```bash
+# Install frontend dependencies
+npm install
+
+# Start Vite dev server
+npm run dev
+```
+Open [http://localhost:5173](http://localhost:5173) in your browser to view the interactive dashboard.
 
 ---
 
-## Docker Setup
+## 🐳 Docker Deployment
 
-To run with PostgreSQL database in Docker:
+To launch the full backend service alongside a PostgreSQL 16 database using Docker Compose:
 
 ```bash
 docker-compose up --build
 ```
-
-The application will automatically run Alembic database migrations and start the uvicorn web server at `http://localhost:8000`.
+Alembic migrations will automatically apply on container startup.
 
 ---
 
-## Testing & Verification
+## 🧪 Testing
 
-Run the full pytest test suite:
+Run the automated test suite covering API routes, discovery providers, editorial scoring, memory deduplication, and end-to-end cycle execution:
 
 ```bash
-pytest tests/
+.venv/bin/pytest -v
 ```
