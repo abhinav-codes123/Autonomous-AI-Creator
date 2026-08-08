@@ -1,4 +1,4 @@
-"""Agent API Endpoint handlers for init and feed."""
+"""Agent API Endpoint handlers for init, feed, and stats."""
 
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,8 +7,9 @@ from app.core.logging import logger
 from app.db.session import get_db
 from app.repositories.agent_repository import AgentRepository
 from app.repositories.post_repository import PostRepository
+from app.repositories.topic_repository import TopicRepository
 from app.scheduler.autonomous_scheduler import autonomous_scheduler
-from app.schemas.agent import AgentInitRequest, AgentInitResponse
+from app.schemas.agent import AgentInitRequest, AgentInitResponse, AgentStatsResponse
 from app.schemas.feed import AgentFeedResponse, PostItemSchema
 from app.services.publishing.publishing_service import PublishingService
 
@@ -94,3 +95,42 @@ async def get_agent_feed(
     ]
 
     return AgentFeedResponse(posts=post_schemas)
+
+
+@router.get(
+    "/stats",
+    response_model=AgentStatsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve Agent Discovery & Publication Statistics",
+)
+async def get_agent_stats(
+    agentId: str = Query(..., description="UUID of the initialized agent"),
+    db: AsyncSession = Depends(get_db),
+) -> AgentStatsResponse:
+    """Retrieve live discovery and publication statistics for the dashboard."""
+    try:
+        agent_uuid = uuid.UUID(agentId)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid agentId format. Must be a valid UUID.",
+        )
+
+    topic_repo = TopicRepository(db)
+    post_repo = PostRepository(db)
+
+    total_discovered = await topic_repo.count_all_topics()
+    total_rejected = await topic_repo.count_rejected_topics()
+    published_count = await post_repo.count_posts_by_agent(agent_uuid)
+
+    shortlisted_count = max(0, total_discovered - total_rejected)
+    selected_count = published_count
+
+    return AgentStatsResponse(
+        sourcesMonitored=8,
+        topicsDiscovered=total_discovered,
+        topicsRejected=total_rejected,
+        published=published_count,
+        shortlisted=shortlisted_count,
+        selected=selected_count,
+    )

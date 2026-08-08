@@ -1,4 +1,4 @@
-"""Pydantic schemas for Agent Init API."""
+"""Pydantic schemas for Agent Init API and Stats."""
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,3 +16,12 @@ class AgentInitResponse(BaseModel):
     agentId: str
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class AgentStatsResponse(BaseModel):
+    sourcesMonitored: int
+    topicsDiscovered: int
+    topicsRejected: int
+    published: int
+    shortlisted: int
+    selected: int

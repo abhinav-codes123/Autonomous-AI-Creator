@@ -2,7 +2,7 @@
 
 import uuid
 from typing import Sequence
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.topic import Topic, TopicStatus
@@ -106,3 +106,13 @@ class TopicRepository:
         stmt = select(Topic).order_by(Topic.discovered_at.desc()).limit(limit)
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def count_all_topics(self) -> int:
+        stmt = select(func.count(Topic.id))
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
+
+    async def count_rejected_topics(self) -> int:
+        stmt = select(func.count(RejectedTopic.id))
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
