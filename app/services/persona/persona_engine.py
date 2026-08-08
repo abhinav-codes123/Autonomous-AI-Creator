@@ -15,7 +15,7 @@ class PersonaProfile:
 
 
 class PersonaEngine:
-    """Configures persona traits dynamically for any given domain."""
+    """Configures persona traits dynamically for ANY given domain."""
 
     DOMAIN_KNOWLEDGE_BASE = {
         "ai security": {
@@ -43,12 +43,67 @@ class PersonaEngine:
                 "No emojis under any circumstances",
             ],
         },
+        "ai infrastructure": {
+            "keywords": [
+                "GPU Sharding",
+                "Interconnect Bandwidth",
+                "p99 Latency",
+                "vLLM",
+                "Triton",
+                "Distributed Training",
+                "Tensor Parallelism",
+                "FlashAttention",
+                "Model Serving",
+                "CUDA",
+            ],
+            "tone": "System Architecture Focused, Performance Driven, Pragmatic",
+            "vocabulary": ["throughput", "bottleneck", "quantization", "kernel optimization", "memory bandwidth", "sharding"],
+            "editorial_opinions": "Prioritizes compute efficiency, hardware utilization, and low-latency scaling over theoretical claims.",
+            "style_guidelines": [
+                "System architecture focus",
+                "Quantitative performance focus",
+                "Pragmatic engineering insights",
+                "No hype",
+                "No emojis",
+            ],
+        },
+        "open source ai": {
+            "keywords": [
+                "Open Model Weights",
+                "Hugging Face",
+                "LoRA",
+                "QLoRA",
+                "Permissive License",
+                "PEFT",
+                "Fine-Tuning",
+                "Model Quantization",
+                "Ollama",
+                "Open Benchmarks",
+            ],
+            "tone": "Community Driven, Transparent, Developer Focused",
+            "vocabulary": ["open-weights", "reproducibility", "fine-tuning", "quantization", "checkpoint", "decentralized"],
+            "editorial_opinions": "Champions transparent open-source model weights, open datasets, and reproducible evaluations.",
+            "style_guidelines": [
+                "Developer and community focus",
+                "Emphasis on open artifacts",
+                "Technical accessibility",
+                "No hype",
+                "No emojis",
+            ],
+        },
         "quantum computing": {
             "keywords": ["Qubits", "Quantum Supremacy", "Superconducting", "Error Correction", "Entanglement"],
             "tone": "Rigorous, Scientific, Academic",
             "vocabulary": ["decoherence", "fidelity", "fault-tolerance", "hamiltonian", "circuit depth"],
             "editorial_opinions": "Focused on real hardware progress vs theoretical hype.",
             "style_guidelines": ["Academic rigor", "No sensationalism", "No emojis"],
+        },
+        "robotics": {
+            "keywords": ["Embodied AI", "ROS2", "Kinematics", "Sim-to-Real", "Spatial Intelligence", "Actuators"],
+            "tone": "Hardware Minded, Empirical, Field Tested",
+            "vocabulary": ["latency", "control loop", "sensor fusion", "end-to-end policy", "teleoperation"],
+            "editorial_opinions": "Evaluates physical world reliability and real-world deployment safety.",
+            "style_guidelines": ["Field-tested focus", "Empirical evidence", "No hype", "No emojis"],
         },
     }
 
@@ -67,7 +122,7 @@ class PersonaEngine:
                 style_guidelines=matched["style_guidelines"],
             )
 
-        # Dynamic fallback for arbitrary tech domain
+        # Dynamic profile generation for ANY custom or unknown domain
         generic_keywords = [
             domain,
             f"{domain} architecture",
@@ -75,6 +130,7 @@ class PersonaEngine:
             f"{domain} state of the art",
             "open source",
             "engineering",
+            "performance",
         ]
         return PersonaProfile(
             name=name,
