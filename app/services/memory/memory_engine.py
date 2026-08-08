@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.topic import TopicStatus
 from app.repositories.post_repository import PostRepository
 from app.repositories.topic_repository import TopicRepository
 from app.utils.text_similarity import calculate_similarity
@@ -15,7 +16,7 @@ class SimilarityCheckResult:
 
 
 class MemoryEngine:
-    """Manages agent memory in PostgreSQL and checks similarity against existing posts/topics."""
+    """Manages agent memory in PostgreSQL and checks similarity against existing published posts/topics."""
 
     def __init__(
         self,
@@ -33,10 +34,10 @@ class MemoryEngine:
         summary: str,
         url: str,
     ) -> SimilarityCheckResult:
-        """Check if topic URL, title, or summary closely matches previously covered topics/posts."""
-        # 1. Exact URL match check
+        """Check if topic URL, title, or summary closely matches previously PUBLISHED topics or posts."""
+        # 1. Check exact URL match against PUBLISHED topics
         existing_topic = await self.topic_repo.get_by_url(url)
-        if existing_topic:
+        if existing_topic and existing_topic.status == TopicStatus.PUBLISHED:
             return SimilarityCheckResult(
                 is_similar=True,
                 similarity_score=1.0,
@@ -56,17 +57,18 @@ class MemoryEngine:
                     matched_text=post.text[:100],
                 )
 
-        # 3. Check recently discovered topics
+        # 3. Check recently published topics
         recent_topics = await self.topic_repo.list_recent_topics(limit=100)
         for topic in recent_topics:
-            topic_text = f"{topic.title} {topic.summary}"
-            score = calculate_similarity(new_text, topic_text)
-            if score >= self.similarity_threshold:
-                return SimilarityCheckResult(
-                    is_similar=True,
-                    similarity_score=score,
-                    matched_text=topic.title,
-                )
+            if topic.status == TopicStatus.PUBLISHED:
+                topic_text = f"{topic.title} {topic.summary}"
+                score = calculate_similarity(new_text, topic_text)
+                if score >= self.similarity_threshold:
+                    return SimilarityCheckResult(
+                        is_similar=True,
+                        similarity_score=score,
+                        matched_text=topic.title,
+                    )
 
         return SimilarityCheckResult(
             is_similar=False,
