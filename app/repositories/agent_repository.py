@@ -28,6 +28,7 @@ class AgentRepository:
         return result.scalar_one_or_none()
 
     async def list_all(self) -> Sequence[Agent]:
-        stmt = select(Agent)
+        """List all agents sorted by newest created first."""
+        stmt = select(Agent).order_by(Agent.created_at.desc())
         result = await self.session.execute(stmt)
         return result.scalars().all()
