@@ -1,8 +1,7 @@
 """Agent API Endpoint handlers for init and feed."""
 
-import asyncio
 import uuid
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import logger
 from app.db.session import get_db
@@ -11,6 +10,7 @@ from app.repositories.post_repository import PostRepository
 from app.scheduler.autonomous_scheduler import autonomous_scheduler
 from app.schemas.agent import AgentInitRequest, AgentInitResponse
 from app.schemas.feed import AgentFeedResponse, PostItemSchema
+from app.services.publishing.publishing_service import PublishingService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -19,14 +19,13 @@ router = APIRouter(prefix="/agent", tags=["agent"])
     "/init",
     response_model=AgentInitResponse,
     status_code=status.HTTP_200_OK,
-    summary="Initialize Agent Persona and start autonomous execution",
+    summary="Initialize Agent Persona, generate initial post, and start autonomous scheduler",
 )
 async def init_agent(
     payload: AgentInitRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> AgentInitResponse:
-    """Initialize a new AI agent persona and start the autonomous generation cycle."""
+    """Initialize a new AI agent persona, generate its first post immediately, and start the background scheduler."""
     agent_repo = AgentRepository(db)
     agent = await agent_repo.create(
         name=payload.persona.name,
@@ -34,11 +33,15 @@ async def init_agent(
     )
     logger.info(f"Initialized agent '{agent.name}' (domain: {agent.domain}, ID: {agent.id})")
 
-    # Start scheduler if not already active
-    autonomous_scheduler.start()
+    # Generate initial post synchronously so GET /feed contains posts immediately upon return
+    publishing_service = PublishingService(db)
+    try:
+        await publishing_service.run_autonomous_cycle(agent_id=agent.id)
+    except Exception as e:
+        logger.error(f"Error generating initial post for agent {agent.id}: {e}")
 
-    # Trigger immediate content generation cycle in background task
-    background_tasks.add_task(autonomous_scheduler.trigger_immediate_run, agent.id)
+    # Start background scheduler for ongoing periodic generation
+    autonomous_scheduler.start()
 
     return AgentInitResponse(agentId=str(agent.id))
 
