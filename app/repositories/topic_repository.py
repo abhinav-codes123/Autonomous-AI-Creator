@@ -31,7 +31,9 @@ class TopicRepository:
             existing.title = title
             existing.summary = summary
             existing.score = score
-            existing.status = status
+            # Preserve PUBLISHED status so published topics are never reverted to NEW
+            if existing.status != TopicStatus.PUBLISHED:
+                existing.status = status
             await self.session.commit()
             await self.session.refresh(existing)
             return existing
@@ -56,13 +58,15 @@ class TopicRepository:
                 existing_again.title = title
                 existing_again.summary = summary
                 existing_again.score = score
-                existing_again.status = status
+                if existing_again.status != TopicStatus.PUBLISHED:
+                    existing_again.status = status
                 await self.session.commit()
                 return existing_again
             raise
 
     async def mark_rejected(self, topic: Topic, reason: str) -> RejectedTopic:
-        topic.status = TopicStatus.REJECTED
+        if topic.status != TopicStatus.PUBLISHED:
+            topic.status = TopicStatus.REJECTED
 
         # Check if RejectedTopic record already exists
         stmt = select(RejectedTopic).where(RejectedTopic.topic_id == topic.id)
