@@ -1,5 +1,6 @@
 """RSS Feed Topic Provider for AI Industry blogs (OpenAI, Anthropic, DeepMind, TechCrunch)."""
 
+import asyncio
 from datetime import datetime, timezone
 import feedparser
 import httpx
@@ -19,32 +20,42 @@ class RSSFeedProvider(TopicProvider):
     def __init__(self, feeds: list[tuple[str, str]] | None = None) -> None:
         self.feeds = feeds or self.DEFAULT_FEEDS
 
+    async def _fetch_single_feed(self, client: httpx.AsyncClient, name: str, feed_url: str) -> list[TopicData]:
+        feed_topics: list[TopicData] = []
+        try:
+            resp = await client.get(feed_url, headers={"User-Agent": "Mozilla/5.0 (Autonomous-AI-Creator)"})
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.text)
+                for entry in parsed.entries[:5]:
+                    title = getattr(entry, "title", "No Title")
+                    url = getattr(entry, "link", "")
+                    summary = getattr(entry, "summary", getattr(entry, "description", ""))
+
+                    if not url:
+                        continue
+
+                    feed_topics.append(
+                        TopicData(
+                            title=title,
+                            summary=summary[:600] if summary else title,
+                            url=url,
+                            published_time=datetime.now(timezone.utc),
+                            source_name=name,
+                        )
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to fetch RSS feed {name} ({feed_url}): {e}")
+        return feed_topics
+
     async def fetch_topics(self) -> list[TopicData]:
         topics: list[TopicData] = []
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            for name, feed_url in self.feeds:
-                try:
-                    resp = await client.get(feed_url, headers={"User-Agent": "Mozilla/5.0 (Autonomous-AI-Creator)"})
-                    if resp.status_code == 200:
-                        parsed = feedparser.parse(resp.text)
-                        for entry in parsed.entries[:5]:
-                            title = getattr(entry, "title", "No Title")
-                            url = getattr(entry, "link", "")
-                            summary = getattr(entry, "summary", getattr(entry, "description", ""))
-
-                            if not url:
-                                continue
-
-                            topics.append(
-                                TopicData(
-                                    title=title,
-                                    summary=summary[:600] if summary else title,
-                                    url=url,
-                                    published_time=datetime.now(timezone.utc),
-                                    source_name=name,
-                                )
-                            )
-                except Exception as e:
-                    logger.warning(f"Failed to fetch RSS feed {name} ({feed_url}): {e}")
+            results = await asyncio.gather(
+                *[self._fetch_single_feed(client, name, feed_url) for name, feed_url in self.feeds],
+                return_exceptions=True,
+            )
+            for res in results:
+                if isinstance(res, list):
+                    topics.extend(res)
 
         return topics

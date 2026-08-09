@@ -1,7 +1,9 @@
-"""Agent API Endpoint handlers for init, feed, and stats."""
+"""Agent API Endpoint handlers for init, feed, stats, and reset."""
 
 import uuid
+from datetime import timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import logger
 from app.db.session import get_db
@@ -11,7 +13,6 @@ from app.repositories.topic_repository import TopicRepository
 from app.scheduler.autonomous_scheduler import autonomous_scheduler
 from app.schemas.agent import AgentInitRequest, AgentInitResponse, AgentStatsResponse
 from app.schemas.feed import AgentFeedResponse, PostItemSchema
-from app.services.publishing.publishing_service import PublishingService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -20,29 +21,23 @@ router = APIRouter(prefix="/agent", tags=["agent"])
     "/init",
     response_model=AgentInitResponse,
     status_code=status.HTTP_200_OK,
-    summary="Initialize Agent Persona, generate initial post, and start autonomous scheduler",
+    summary="Initialize Agent Persona and start autonomous scheduler",
 )
 async def init_agent(
     payload: AgentInitRequest,
     db: AsyncSession = Depends(get_db),
 ) -> AgentInitResponse:
-    """Initialize a new AI agent persona, generate its first post immediately, and start the background scheduler."""
+    """Persist one agent and begin its independent scheduled publishing lifecycle."""
     agent_repo = AgentRepository(db)
     agent = await agent_repo.create(
         name=payload.persona.name,
         domain=payload.persona.domain,
     )
     agent_id_str = str(agent.id)
-    logger.info(f"Initialized agent '{agent.name}' (domain: {agent.domain}, ID: {agent_id_str})")
+    logger.info(f"[INIT] Agent created: {agent_id_str} ({agent.name}, {agent.domain})")
 
-    # Generate initial post synchronously so GET /feed contains posts immediately upon return
-    publishing_service = PublishingService(db)
-    try:
-        await publishing_service.run_autonomous_cycle(agent_id=agent.id)
-    except Exception as e:
-        logger.error(f"Error generating initial post for agent {agent_id_str}: {e}")
-
-    # Start background scheduler for ongoing periodic generation
+    # Publishing is deliberately not triggered here. The first post may only be
+    # created by the independently running scheduled cycle.
     autonomous_scheduler.start()
 
     return AgentInitResponse(agentId=agent_id_str)
@@ -86,7 +81,11 @@ async def get_agent_feed(
     post_schemas = [
         PostItemSchema(
             id=str(p.id),
-            createdAt=p.created_at.isoformat(),
+            createdAt=(
+                p.created_at.replace(tzinfo=timezone.utc)
+                if p.created_at.tzinfo is None
+                else p.created_at.astimezone(timezone.utc)
+            ).isoformat().replace("+00:00", "Z"),
             text=p.text,
             rationale=p.rationale,
             sources=[s.url for s in p.sources],
@@ -119,8 +118,8 @@ async def get_agent_stats(
     topic_repo = TopicRepository(db)
     post_repo = PostRepository(db)
 
-    total_discovered = await topic_repo.count_all_topics()
-    total_rejected = await topic_repo.count_rejected_topics()
+    total_discovered = await topic_repo.count_all_topics(agent_id=agent_uuid)
+    total_rejected = await topic_repo.count_rejected_topics(agent_id=agent_uuid)
     published_count = await post_repo.count_posts_by_agent(agent_uuid)
 
     shortlisted_count = max(0, total_discovered - total_rejected)
@@ -134,3 +133,23 @@ async def get_agent_stats(
         shortlisted=shortlisted_count,
         selected=selected_count,
     )
+
+
+@router.post(
+    "/reset",
+    status_code=status.HTTP_200_OK,
+    summary="DEVELOPMENT ONLY: Reset agent state and stop scheduler",
+)
+async def reset_agent_state(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """DEVELOPMENT ONLY: Truncate posts, topics, and agents tables to prepare for a fresh evaluation."""
+    autonomous_scheduler.shutdown()
+    await db.execute(text("DELETE FROM post_sources;"))
+    await db.execute(text("DELETE FROM posts;"))
+    await db.execute(text("DELETE FROM rejected_topics;"))
+    await db.execute(text("DELETE FROM topics;"))
+    await db.execute(text("DELETE FROM agents;"))
+    await db.commit()
+    logger.info("[DEV RESET] Successfully reset database state.")
+    return {"status": "reset_complete"}

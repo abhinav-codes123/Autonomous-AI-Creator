@@ -66,6 +66,17 @@ class PostRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def get_recent_posts_by_agent(self, agent_id: uuid.UUID, limit: int = 100) -> Sequence[Post]:
+        stmt = (
+            select(Post)
+            .where(Post.agent_id == agent_id)
+            .options(selectinload(Post.sources))
+            .order_by(Post.created_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def count_posts_by_agent(self, agent_id: uuid.UUID) -> int:
         stmt = select(func.count(Post.id)).where(Post.agent_id == agent_id)
         result = await self.session.execute(stmt)

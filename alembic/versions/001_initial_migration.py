@@ -28,15 +28,19 @@ def upgrade() -> None:
     op.create_table(
         'topics',
         sa.Column('id', sa.Uuid(), nullable=False),
+        sa.Column('agent_id', sa.Uuid(), nullable=False),
         sa.Column('title', sa.Text(), nullable=False),
         sa.Column('summary', sa.Text(), nullable=True),
         sa.Column('url', sa.String(length=2048), nullable=False),
         sa.Column('score', sa.Float(), nullable=False),
         sa.Column('status', sa.String(length=32), nullable=False),
         sa.Column('discovered_at', sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(['agent_id'], ['agents.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
+        ,sa.UniqueConstraint('agent_id', 'url', name='uq_agent_topic_url')
     )
-    op.create_index(op.f('ix_topics_url'), 'topics', ['url'], unique=True)
+    op.create_index(op.f('ix_topics_agent_id'), 'topics', ['agent_id'], unique=False)
+    op.create_index(op.f('ix_topics_url'), 'topics', ['url'], unique=False)
 
     op.create_table(
         'rejected_topics',
@@ -79,5 +83,6 @@ def downgrade() -> None:
     op.drop_table('posts')
     op.drop_table('rejected_topics')
     op.drop_index(op.f('ix_topics_url'), table_name='topics')
+    op.drop_index(op.f('ix_topics_agent_id'), table_name='topics')
     op.drop_table('topics')
     op.drop_table('agents')

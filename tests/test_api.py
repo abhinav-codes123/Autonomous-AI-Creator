@@ -21,6 +21,12 @@ async def test_init_agent_endpoint(async_client: AsyncClient):
     assert "agentId" in data
     assert len(data["agentId"]) > 0
 
+    # /init persists only the agent. Publishing must wait for the autonomous
+    # scheduler rather than occurring as a side effect of this request.
+    feed = await async_client.get(f"/api/agent/feed?agentId={data['agentId']}")
+    assert feed.status_code == 200
+    assert feed.json()["posts"] == []
+
 
 @pytest.mark.asyncio
 async def test_get_agent_feed_endpoint(async_client: AsyncClient, db_session: AsyncSession):
