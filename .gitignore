@@ -41,6 +41,7 @@ MANIFEST
 *.sqlite
 *.sqlite3
 autonomous_agent.db
+benchmark_results.json
 
 # Testing & Coverage
 .pytest_cache/
