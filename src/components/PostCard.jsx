@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { formatTimestamp, getSourceDisplayName } from '../utils/format';
 
 function ExternalLinkIcon() {
@@ -28,6 +29,8 @@ function ExternalLinkIcon() {
 }
 
 function PostCard({ post, isNew, isFeatured, category }) {
+  const [showRationale, setShowRationale] = useState(false);
+
   return (
     <article
       className={`post-card${isFeatured ? ' post-card--featured' : ''}${isNew ? ' post-card--new' : ''}`}
@@ -49,14 +52,8 @@ function PostCard({ post, isNew, isFeatured, category }) {
 
       <p className="post-card__text">{post.text}</p>
 
-      <div className="post-card__section">
-        <h3 className="post-card__section-title">Why I Published</h3>
-        <p className="post-card__rationale">{post.rationale}</p>
-      </div>
-
       {post.sources && post.sources.length > 0 && (
         <div className="post-card__section">
-          <h3 className="post-card__section-title">Sources</h3>
           <ul className="post-card__sources">
             {post.sources.map((source) => (
               <li key={source}>
@@ -72,6 +69,23 @@ function PostCard({ post, isNew, isFeatured, category }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      <div className="post-card__actions">
+        <button 
+          className="btn-rationale" 
+          onClick={() => setShowRationale(!showRationale)}
+        >
+          <span className="btn-rationale__icon">🧠</span>
+          {showRationale ? 'Hide AI Rationale' : 'View AI Rationale'}
+        </button>
+      </div>
+
+      {showRationale && (
+        <div className="post-card__rationale-panel slide-down">
+          <h3 className="rationale-panel__title">AI Thought Process</h3>
+          <p className="rationale-panel__text">{post.rationale}</p>
         </div>
       )}
     </article>

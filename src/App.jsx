@@ -227,56 +227,76 @@ function App() {
           </div>
 
           <section className="panel connect-agent">
-            <h2 className="panel__title">Connect Agent</h2>
+            <h2 className="panel__title">Initialize System</h2>
             <p className="connect-agent__description">
-              Initialize your autonomous AI agent to begin monitoring the ecosystem and
-              publishing intelligence.
+              {isDemo 
+                ? 'Demo mode active. Initialize the simulated agent swarm to view the dashboard.' 
+                : 'Initialize your autonomous AI agent to begin monitoring the ecosystem and publishing intelligence.'}
             </p>
 
-            <form className="connect-agent__form" onSubmit={handleInitialize}>
-              <div className="connect-agent__field">
-                <label htmlFor="persona-name">Persona Name</label>
-                <input
-                  id="persona-name"
-                  type="text"
-                  value={personaName}
-                  onChange={(e) => setPersonaName(e.target.value)}
-                  placeholder="Ada"
-                  required
-                />
+            {isDemo ? (
+              <div className="demo-init-container">
+                <button
+                  type="button"
+                  className="connect-agent__button demo-swarm-btn"
+                  onClick={() => {
+                    setConnected(true);
+                    setAgentId('demo');
+                    setIsPolling(true);
+                  }}
+                >
+                  <span className="demo-swarm-btn__icon">🚀</span>
+                  Initialize Demo Swarm
+                </button>
               </div>
+            ) : (
+              <form className="connect-agent__form" onSubmit={handleInitialize}>
+                <div className="connect-agent__field">
+                  <label htmlFor="persona-name">Persona Name</label>
+                  <input
+                    id="persona-name"
+                    type="text"
+                    value={personaName}
+                    onChange={(e) => setPersonaName(e.target.value)}
+                    placeholder="Ada"
+                    required
+                  />
+                </div>
 
-              <div className="connect-agent__field">
-                <label htmlFor="persona-domain">Domain</label>
-                <input
-                  id="persona-domain"
-                  type="text"
-                  value={personaDomain}
-                  onChange={(e) => setPersonaDomain(e.target.value)}
-                  placeholder="AI Security"
-                  required
-                />
-              </div>
+                <div className="connect-agent__field">
+                  <label htmlFor="persona-domain">Domain</label>
+                  <input
+                    id="persona-domain"
+                    type="text"
+                    value={personaDomain}
+                    onChange={(e) => setPersonaDomain(e.target.value)}
+                    placeholder="AI Security"
+                    required
+                  />
+                </div>
 
-              {initError && (
-                <p className="connect-agent__error" role="alert">
-                  {initError}
-                </p>
-              )}
+                {initError && (
+                  <p className="connect-agent__error" role="alert">
+                    {initError}
+                  </p>
+                )}
 
-              <button
-                type="submit"
-                className="connect-agent__button"
-                disabled={initLoading}
-              >
-                {initLoading ? 'Initializing…' : 'Initialize Agent'}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="connect-agent__button"
+                  disabled={initLoading}
+                >
+                  {initLoading ? 'Initializing…' : 'Initialize Agent'}
+                </button>
+              </form>
+            )}
 
-            <p className="connect-agent__hint">
-              For demo mode without a backend, add{' '}
-              <code>?demo=true</code> to the URL.
-            </p>
+            {!isDemo && (
+              <p className="connect-agent__hint">
+                For demo mode without a backend, add{' '}
+                <code>?demo=true</code> to the URL.
+              </p>
+            )}
           </section>
         </div>
       </div>
