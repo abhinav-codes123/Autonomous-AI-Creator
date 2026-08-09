@@ -843,3 +843,473 @@ The frontend can also be connected to:
 for agent initialization once the backend integration is completed.
 
 can you make this readme better without changing its context
+
+
+prompts by contributor:-
+# PROMPTS.md
+
+## AI Usage / Prompt History
+
+This document summarizes the prompts used during development of the Autonomous AI Creator project. Some prompts are consolidated for readability rather than being exact verbatim transcripts.
+
+---
+
+## 1. Understand the Problem Statement
+
+Prompt:
+
+Explain the Autonomous AI Creator problem statement and what the agent is actually required to do. Clarify whether the domain has to be selected beforehand or whether the evaluator provides the persona/domain through the `/api/agent/init` request.
+
+Purpose:
+
+Understand the lifecycle and API contract before implementation.
+
+---
+
+## 2. Design the Project
+
+Prompt:
+
+Give me a detailed prompt to build this project. The implementation should use Python only and satisfy the two required HTTP endpoints, autonomous topic discovery, editorial judgment, persona consistency, memory, and autonomous publishing over time.
+
+Purpose:
+
+Create the initial implementation plan and architecture.
+
+---
+
+## 3. Source Discovery APIs
+
+Prompts:
+
+Are these APIs free?
+
+How do I get and use these APIs?
+
+Are all of these public?
+
+Give me the API code for the sources.
+
+Purpose:
+
+Determine which live information sources could be used for autonomous topic discovery and how they could be integrated.
+
+---
+
+## 4. Autonomous Feed Timing
+
+Prompts:
+
+Does the feed need to have new posts once a feed request is received?
+
+Tell me how to fix it so the second post comes after 1 minute and does not get rejected.
+
+Purpose:
+
+Clarify that `/feed` must be read-only and that autonomous publishing must happen independently through a background scheduler rather than being triggered by feed requests.
+
+---
+
+## 5. Diagnose Persisted State / Old Posts
+
+Prompts:
+
+Something is going horribly wrong. The project is still storing posts from the last run of the backend.
+
+I can't see any posts.
+
+Give me a prompt to fix it and also fix the rejection issue of posts. The problem is that the project is still storing the posts from the last run of the backend.
+
+Purpose:
+
+Identify problems caused by historical database state, duplicate memory, and development runs interfering with fresh evaluation runs.
+
+---
+
+## 6. Persona Relevance Problems
+
+Prompt:
+
+Evaluate these generated posts for the Mechanical Engineer persona.
+
+Purpose:
+
+Expose weaknesses in persona relevance, editorial reasoning, and generated content quality.
+
+Observed problem:
+
+Posts were generic AI/technology commentary that simply replaced the requested domain with "Mechanical engineer", instead of producing genuinely domain-specific content.
+
+---
+
+## 7. Fix the Editorial / Rejection System
+
+Prompt:
+
+Give me a prompt to fix the editorial quality and rejection issue. Previously published topics should not prevent legitimate new topics from being published, and the system should not reuse posts from previous backend runs.
+
+Purpose:
+
+Strengthen editorial filtering and memory while keeping historical development state from contaminating evaluation.
+
+---
+
+## 8. Test Autonomous Publishing
+
+Prompts:
+
+First check how many new posts are being generated after at least 10 cycles because that is the most important thing.
+
+An autonomous post should happen after 1 minute.
+
+Give me a prompt to test the backend.
+
+Purpose:
+
+Validate the most important challenge requirement: new posts must appear autonomously over time without additional prompts or API calls.
+
+---
+
+## 9. Test an Unfamiliar AI Coding Agent
+
+Prompt:
+
+Give me a prompt for a new AI coding agent, Antigravity, which is unfamiliar with this project. Modify the prompt accordingly so it can inspect the existing repository and understand the architecture before making changes.
+
+Purpose:
+
+Create a self-contained engineering task for an unfamiliar coding agent.
+
+---
+
+## 10. Fix Historical Agent Concurrency
+
+Prompt given to the coding agent:
+
+Inspect the existing autonomous scheduler and fix the lifecycle so that only the currently active evaluation agent is processed. Historical agents from previous initialization runs must not continue running. Prevent multiple historical agents from being processed by every scheduler cycle. Preserve autonomous publishing and memory behavior.
+
+Purpose:
+
+Fix the root cause where every historical agent was being processed on every scheduler cycle.
+
+---
+
+## 11. Optimize Topic Discovery
+
+Prompt given to the coding agent:
+
+Optimize discovery so all configured topic providers can run concurrently instead of serially. Ensure the total discovery cycle completes comfortably before the one-minute scheduler interval and prevent APScheduler overlapping execution errors.
+
+Purpose:
+
+Reduce cycle execution time and prevent scheduler overlap.
+
+Result:
+
+Discovery was changed to use asynchronous parallel execution. The tested cycle duration became approximately 8–17 seconds, comfortably below the 60-second interval.
+
+---
+
+## 12. Scheduler Telemetry
+
+Prompt given to the coding agent:
+
+Add scheduler telemetry so each autonomous cycle records the cycle number, start time, duration, interval, active agents, discovered topics, rejected topics, and published posts. Use this telemetry to verify autonomous behavior over multiple cycles.
+
+Purpose:
+
+Make autonomous behavior observable and objectively testable.
+
+---
+
+## 13. Fresh Database / Reset Testing
+
+Prompt:
+
+Clearly identify what development data needs to be cleared before evaluation and provide a safe way to reset the database without affecting the production application.
+
+Purpose:
+
+Ensure evaluation begins with a clean state and no historical agents/posts/topics.
+
+---
+
+## 14. Ten-Cycle Endurance Test
+
+Prompt:
+
+Run a black-box autonomous scheduler test for at least 10 consecutive cycles. Initialize exactly one agent, verify the feed is empty immediately after initialization, then allow the scheduler to operate without further prompts or initialization requests. Measure discovered topics, rejected topics, published posts, cycle duration, trigger interval, skipped executions, overlapping executions, and duplicate prevention.
+
+Purpose:
+
+Prove that autonomous publishing works independently of `/feed` requests.
+
+Observed result:
+
+- 11 cycles completed
+- 11 posts initially published
+- approximately 60-second average interval
+- zero skipped executions
+- zero overlapping executions
+- average cycle duration approximately 14.5 seconds
+
+---
+
+## 15. Diagnose Editorial Quality
+
+Prompt:
+
+Evaluate whether the generated rationale is actually topic-specific. The rationale must explain why the selected topic was chosen, why it matters now, and why it was selected over other candidates. Do not rely on generic reusable template language.
+
+Purpose:
+
+Identify a weakness in the publishing rationale.
+
+Observed issue:
+
+The rationale was sometimes too templated and did not provide enough topic-specific reasoning.
+
+---
+
+## 16. Diagnose Topic Diversity
+
+Prompt:
+
+Check whether the autonomous feed is overly dependent on one discovery source. Evaluate topic diversity across Hacker News, GitHub, arXiv, and RSS sources and determine whether the feed is genuinely varied.
+
+Purpose:
+
+Identify excessive dependence on GitHub Trending.
+
+Observed issue:
+
+A large proportion of selected topics came from GitHub Trending.
+
+---
+
+## 17. Production Deployment Preparation
+
+Prompt given to the coding agent:
+
+Prepare this existing Autonomous AI Creator project for production deployment on Render. Inspect the repository first. Preserve the working scheduler/editorial architecture. Verify PostgreSQL compatibility, migrations, environment variables, production startup, health endpoint, `.gitignore`, and tests. Do not deploy automatically.
+
+Required production behavior:
+
+- Local development can continue using SQLite + `aiosqlite`.
+- Render production uses PostgreSQL + `asyncpg`.
+- `DATABASE_URL` must come from the environment.
+- Alembic migrations must work on a fresh database.
+- Scheduler must continue running after `/init`.
+- Production must not reset the database on startup.
+- Secrets must not be committed.
+
+Purpose:
+
+Make the tested project deployable without changing its core autonomous behavior.
+
+---
+
+## 18. PostgreSQL URL Compatibility
+
+Prompt given to the coding agent:
+
+Verify that Render's standard `postgres://` or `postgresql://` connection string can be used by the application's async SQLAlchemy configuration. Normalize these URLs to `postgresql+asyncpg://` automatically while preserving SQLite URLs for local development. Add tests for both PostgreSQL and SQLite configuration.
+
+Result:
+
+Added configuration validation and tests for PostgreSQL URL normalization.
+
+---
+
+## 19. Fresh Migration Test
+
+Prompt given to the coding agent:
+
+Test the complete Alembic migration chain against a fresh database. Verify that migrations 001 through 004 execute successfully and create all required tables and the `agents.is_active` field.
+
+Result:
+
+All four migrations were verified against a fresh database.
+
+---
+
+## 20. Production Safety
+
+Prompt:
+
+Verify that production initialization does not reset the database. Ensure `RESET_DATABASE_ON_INIT` remains false and that the deployed application starts with an empty PostgreSQL database without deleting data on startup.
+
+Purpose:
+
+Prevent accidental destruction of evaluator state.
+
+---
+
+## 21. Local Production-Configuration Test
+
+Prompt:
+
+Test the production PostgreSQL configuration locally before deploying. Run the migrations against a fresh PostgreSQL database, start FastAPI, initialize exactly one agent, verify the initial feed is empty, then allow the scheduler to publish autonomously and verify the post persists.
+
+Purpose:
+
+Prove the production database configuration works before deploying to Render.
+
+---
+
+## 22. Git Safety Before Deployment
+
+Prompts:
+
+How do I know how much my local repository is behind the `akshat_dev` branch?
+
+I can't push unless I know what I did. What if it breaks the deployed project?
+
+Purpose:
+
+Inspect local-vs-remote commit state before pushing deployment changes.
+
+Commands used to inspect the state:
+
+git fetch origin
+
+git rev-list --left-right --count akshat_dev...origin/akshat_dev
+
+git log -1 --oneline --decorate
+
+git show --stat HEAD
+
+git diff origin/akshat_dev...akshat_dev
+
+Result:
+
+The local branch was one commit ahead. The commit was inspected before being pushed.
+
+---
+
+## 23. Deployment Commit Verification
+
+Commit inspected:
+
+54403a3 Prepare project for production deployment
+
+Files changed:
+
+README.md
+app/core/config.py
+tests/test_config.py
+
+Prompt / decision:
+
+Inspect the exact commit before pushing it. Determine whether it changes the scheduler, publishing service, discovery, database models, migrations, API endpoints, editorial logic, or memory system.
+
+Result:
+
+The commit only contained deployment documentation, PostgreSQL URL normalization, and tests. No autonomous publishing architecture was changed.
+
+---
+
+## 24. Render Deployment Configuration
+
+Prompt:
+
+Give me the exact Render deployment configuration for this FastAPI project, including PostgreSQL, branch, build command, start command, environment variables, and post-deployment verification.
+
+Final configuration:
+
+Branch:
+
+akshat_dev
+
+Build:
+
+pip install -r requirements.txt && alembic upgrade head
+
+Start:
+
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+Production environment variables:
+
+DATABASE_URL=<Render Internal PostgreSQL URL>
+LLM_PROVIDER=openai
+OPENAI_API_KEY=<secret>
+OPENAI_MODEL=gpt-4o-mini
+SCHEDULER_INTERVAL_MINUTES=1
+
+---
+
+## 25. Online Postman Verification
+
+Prompt:
+
+Test the deployed application online using Postman. Initialize the agent exactly once, verify the feed is immediately empty, wait without sending requests, then check the feed again to prove the scheduler created a post autonomously.
+
+Purpose:
+
+Verify that the deployed application does not depend on feed requests to create posts.
+
+---
+
+## 26. Scheduler Interval Decision
+
+Prompt:
+
+Given the exact hackathon requirements and a 48-hour observation period, determine an appropriate autonomous scheduler interval. The interval should allow live topic discovery without creating unnecessary load or making the feed too sparse.
+
+Decision:
+
+A 5-minute discovery interval was considered a better production behavior than a 1-minute interval because the scheduler should represent an autonomous creator rather than continuously poll and publish.
+
+The scheduler interval is a discovery/evaluation interval, not a guaranteed publishing interval.
+
+A cycle may legitimately produce zero posts when all discovered topics are irrelevant or duplicates.
+
+---
+
+## 27. Final Design Principle
+
+The autonomous lifecycle is:
+
+Initialize once
+      ↓
+Scheduler runs independently
+      ↓
+Discover live topics
+      ↓
+Evaluate relevance
+      ↓
+Reject weak topics
+      ↓
+Check memory / duplicates
+      ↓
+Select strongest candidate
+      ↓
+Generate persona-consistent post
+      ↓
+Persist post + rationale + sources
+      ↓
+Wait for next autonomous cycle
+      ↓
+Repeat
+
+The `/api/agent/feed` endpoint is read-only and must never be responsible for creating posts.
+
+---
+
+## 28. Final Verification Goals
+
+The final deployed system must demonstrate:
+
+- Autonomous operation after one `/init`
+- Live topic discovery
+- Editorial rejection of irrelevant topics
+- Stable persona/domain
+- Persistent memory
+- Duplicate prevention
+- Topic-specific rationale
+- Source attribution
+- Autonomous posts appearing over time
+- Read-only feed retrieval
+- Persistent PostgreSQL state
+- No dependence on human prompts after initialization
