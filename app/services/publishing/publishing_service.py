@@ -17,9 +17,11 @@ from app.services.discovery.github_trending import GitHubTrendingProvider
 from app.services.discovery.hacker_news import HackerNewsProvider
 from app.services.discovery.rss_feed import RSSFeedProvider
 from app.services.editorial.editorial_engine import EditorialEngine
+from app.services.editorial.persona_relevance import PersonaRelevanceService
 from app.services.llm import get_llm_provider
 from app.services.memory.memory_engine import MemoryEngine
 from app.services.persona.persona_engine import PersonaEngine
+from app.services.publishing.post_validator import PostValidator
 from app.utils.text_similarity import calculate_similarity
 
 
@@ -42,7 +44,7 @@ class FallbackTopicProvider(TopicProvider):
 
 
 class PublishingService:
-    """Orchestrates Topic Discovery -> Editorial Filtering -> Memory Check -> LLM Generation -> DB Persistence."""
+    """Orchestrates Topic Discovery -> Relevance Check -> Editorial Filtering -> Memory Check -> LLM Generation -> DB Persistence."""
 
     def __init__(
         self,
@@ -53,10 +55,12 @@ class PublishingService:
         self.agent_repo = AgentRepository(session)
         self.topic_repo = TopicRepository(session)
         self.post_repo = PostRepository(session)
+        self.persona_relevance = PersonaRelevanceService()
         self.editorial_engine = EditorialEngine()
         self.memory_engine = MemoryEngine(session)
         self.persona_engine = PersonaEngine()
         self.prompt_builder = PromptBuilder()
+        self.post_validator = PostValidator()
         self.llm_provider = get_llm_provider()
 
         self.providers = providers or [
@@ -131,13 +135,30 @@ class PublishingService:
 
         scored_candidates: list[tuple[TopicData, float, list[str]]] = []
 
-        # Step 2 & 3: Editorial Filtering & Memory Similarity Check
+        # Step 2 & 3: Relevance Check & Editorial Filtering & Memory Similarity Check
         for topic_data in all_discovered:
+            # Domain Relevance Check (NEW GATE)
+            relevance_result = self.persona_relevance.evaluate_relevance(topic_data, persona)
+            
+            if not relevance_result.relevant:
+                # Persist as rejected immediately
+                db_topic = await self.topic_repo.create_or_update(
+                    title=topic_data.title,
+                    summary=topic_data.summary,
+                    url=topic_data.url,
+                    agent_id=agent.id,
+                    score=relevance_result.score,
+                    status=TopicStatus.REJECTED,
+                )
+                await self.topic_repo.mark_rejected(db_topic, reason=relevance_result.reason)
+                continue
+
             # Memory Check
             sim_result = await self.memory_engine.check_similarity(
                 title=topic_data.title,
                 summary=topic_data.summary,
                 url=topic_data.url,
+                agent_id=agent.id,
             )
 
             # Editorial Evaluation
@@ -153,6 +174,7 @@ class PublishingService:
                 title=topic_data.title,
                 summary=topic_data.summary,
                 url=topic_data.url,
+                agent_id=agent.id,
                 score=editorial_score.final_score,
                 status=TopicStatus.NEW,
             )
@@ -163,7 +185,8 @@ class PublishingService:
                 logger.info(f"Rejected topic '{topic_data.title[:50]}': {reason}")
             else:
                 aggregated_sources = source_clusters.get(topic_data.url, [topic_data.url])
-                scored_candidates.append((topic_data, editorial_score.final_score, aggregated_sources))
+                # Store relevance reason in the tuple so we can pass it to the prompt builder
+                scored_candidates.append((topic_data, editorial_score.final_score, aggregated_sources, relevance_result.reason))
 
         if not scored_candidates:
             logger.warning(f"No suitable topics passed editorial filtering for agent {agent.name}.")
@@ -171,23 +194,43 @@ class PublishingService:
 
         # Pick top scoring candidate topic
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
-        best_topic, best_score, aggregated_sources = scored_candidates[0]
+        best_topic, best_score, aggregated_sources, relevance_reason = scored_candidates[0]
         logger.info(f"Selected best topic for post generation: '{best_topic.title}' (score: {best_score})")
 
         # Step 4: Fetch recent posts for memory context & construct prompt
-        previous_posts = await self.memory_engine.get_recent_posts_context(limit=5)
+        previous_posts = await self.memory_engine.get_recent_posts_context(agent_id=agent.id, limit=5)
         prompt = self.prompt_builder.build_post_generation_prompt(
             persona=persona,
             topic=best_topic,
             previous_posts=previous_posts,
+            relevance_reason=relevance_reason,
         )
 
         # Step 5: Generate post with LLM Provider
         generated = await self.llm_provider.generate(prompt)
 
         final_sources = list(dict.fromkeys((generated.sources or []) + aggregated_sources))
+        final_sources = self.post_validator.normalize_sources(final_sources)
+        
+        # Step 6: Post Validation
+        validation_result = self.post_validator.validate(
+            text=generated.text,
+            rationale=generated.rationale,
+            sources=final_sources,
+            topic_title=best_topic.title,
+            persona_domain=agent.domain,
+        )
+        
+        if not validation_result.valid:
+            reason = f"Post validation failed: {'; '.join(validation_result.reasons)}"
+            logger.warning(f"Rejecting generated post for agent {agent.name}: {reason}")
+            # Mark the topic as rejected so we don't try it again
+            db_topic = await self.topic_repo.get_by_url(best_topic.url, agent_id=agent.id)
+            if db_topic:
+                await self.topic_repo.mark_rejected(db_topic, reason=reason)
+            return None
 
-        # Step 6: Persist Post and update Topic status in DB
+        # Step 7: Persist Post and update Topic status in DB
         post = await self.post_repo.create_post(
             agent_id=agent.id,
             text=generated.text,
@@ -195,8 +238,8 @@ class PublishingService:
             sources=final_sources,
         )
 
-        # Mark topic as published
-        db_topic = await self.topic_repo.get_by_url(best_topic.url)
+        # Mark topic as published ONLY after post is saved
+        db_topic = await self.topic_repo.get_by_url(best_topic.url, agent_id=agent.id)
         if db_topic:
             await self.topic_repo.mark_published(db_topic)
 

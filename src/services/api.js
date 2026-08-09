@@ -128,43 +128,43 @@ export const DEMO_EDITORIAL = {
 export const DEMO_ACTIVITY = [
   {
     id: 'act-1',
-    label: 'PUBLISHING',
-    description: 'Publication queued: prompt-injection attack analysis',
+    label: '[PUBLISH_OK]',
+    description: 'Post dispatched to feed network: prompt-injection attack analysis',
     timestamp: '2026-08-07T14:28:00Z',
     status: 'complete',
   },
   {
     id: 'act-2',
-    label: 'SELECTING A TOPIC',
-    description: 'Selected high-signal topic from 3 shortlisted candidates',
+    label: '[EDITORIAL_OK]',
+    description: 'Selected highest signal topic (Score: 9.8/10)',
     timestamp: '2026-08-07T14:25:00Z',
     status: 'complete',
   },
   {
     id: 'act-3',
-    label: 'REJECTING LOW-SIGNAL TOPICS',
-    description: 'Filtered 8 topics below relevance threshold',
+    label: '[FILTER_DROP]',
+    description: 'Dropped 8 topics: failed relevance threshold (< 7.0)',
     timestamp: '2026-08-07T14:20:00Z',
     status: 'complete',
   },
   {
     id: 'act-4',
-    label: 'EVALUATING RELEVANCE',
-    description: 'Scoring 14 discovered topics against AI Security criteria',
+    label: '[EVAL_START]',
+    description: 'Scoring 14 discovered topics against domain constraints',
     timestamp: '2026-08-07T14:15:00Z',
     status: 'complete',
   },
   {
     id: 'act-5',
-    label: 'DISCOVERING TOPICS',
-    description: 'Extracted 14 candidate topics from monitored sources',
+    label: '[DISCOVER_OK]',
+    description: 'Extracted 14 candidate topics from memory buffer',
     timestamp: '2026-08-07T14:10:00Z',
     status: 'complete',
   },
   {
     id: 'act-6',
-    label: 'SCANNING SOURCES',
-    description: 'Monitoring arXiv, OWASP, NIST, and security advisories',
+    label: '[SCAN_ACTIVE]',
+    description: 'Monitoring HackerNews, GitHub Trending, and RSS endpoints',
     timestamp: '2026-08-07T14:05:00Z',
     status: 'active',
   },
@@ -222,7 +222,7 @@ export function buildLiveActivity({ lastChecked, postCount, isPolling, loading, 
   if (isPolling) {
     items.push({
       id: 'live-scan',
-      label: 'SCANNING SOURCES',
+      label: '[SCAN_ACTIVE]',
       description: loading
         ? 'Synchronizing with intelligence feed'
         : 'Monitoring 8 live intelligence source endpoints (HN, GitHub, arXiv, RSS)',
@@ -234,7 +234,7 @@ export function buildLiveActivity({ lastChecked, postCount, isPolling, loading, 
   if (postCount > 0) {
     items.push({
       id: 'live-publish',
-      label: 'PUBLISHING',
+      label: '[PUBLISH_OK]',
       description: `${postCount} publication${postCount === 1 ? '' : 's'} preserved in intelligence feed`,
       timestamp: now,
       status: 'complete',
@@ -244,7 +244,7 @@ export function buildLiveActivity({ lastChecked, postCount, isPolling, loading, 
   if (items.length === 0) {
     items.push({
       id: 'live-init',
-      label: 'EVALUATING RELEVANCE',
+      label: '[SYS_INIT]',
       description: 'Agent initialized — awaiting first discovery cycle',
       timestamp: now,
       status: 'active',

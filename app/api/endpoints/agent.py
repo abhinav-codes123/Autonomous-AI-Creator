@@ -119,8 +119,8 @@ async def get_agent_stats(
     topic_repo = TopicRepository(db)
     post_repo = PostRepository(db)
 
-    total_discovered = await topic_repo.count_all_topics()
-    total_rejected = await topic_repo.count_rejected_topics()
+    total_discovered = await topic_repo.count_all_topics(agent_id=agent_uuid)
+    total_rejected = await topic_repo.count_rejected_topics(agent_id=agent_uuid)
     published_count = await post_repo.count_posts_by_agent(agent_uuid)
 
     shortlisted_count = max(0, total_discovered - total_rejected)

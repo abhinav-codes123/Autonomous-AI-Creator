@@ -13,8 +13,8 @@ class TopicRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_by_url(self, url: str) -> Topic | None:
-        stmt = select(Topic).options(selectinload(Topic.rejected_info)).where(Topic.url == url)
+    async def get_by_url(self, url: str, agent_id: uuid.UUID) -> Topic | None:
+        stmt = select(Topic).options(selectinload(Topic.rejected_info)).where(Topic.url == url, Topic.agent_id == agent_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -23,10 +23,11 @@ class TopicRepository:
         title: str,
         summary: str,
         url: str,
+        agent_id: uuid.UUID,
         score: float = 0.0,
         status: TopicStatus = TopicStatus.NEW,
     ) -> Topic:
-        existing = await self.get_by_url(url)
+        existing = await self.get_by_url(url, agent_id)
         if existing:
             existing.title = title
             existing.summary = summary
@@ -40,6 +41,7 @@ class TopicRepository:
 
         topic = Topic(
             id=uuid.uuid4(),
+            agent_id=agent_id,
             title=title,
             summary=summary,
             url=url,
@@ -53,7 +55,7 @@ class TopicRepository:
             return topic
         except Exception:
             await self.session.rollback()
-            existing_again = await self.get_by_url(url)
+            existing_again = await self.get_by_url(url, agent_id)
             if existing_again:
                 existing_again.title = title
                 existing_again.summary = summary
@@ -106,17 +108,23 @@ class TopicRepository:
         await self.session.refresh(topic)
         return topic
 
-    async def list_recent_topics(self, limit: int = 100) -> Sequence[Topic]:
+    async def list_recent_topics(self, limit: int = 100, agent_id: uuid.UUID | None = None) -> Sequence[Topic]:
         stmt = select(Topic).order_by(Topic.discovered_at.desc()).limit(limit)
+        if agent_id:
+            stmt = stmt.where(Topic.agent_id == agent_id)
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def count_all_topics(self) -> int:
+    async def count_all_topics(self, agent_id: uuid.UUID | None = None) -> int:
         stmt = select(func.count(Topic.id))
+        if agent_id:
+            stmt = stmt.where(Topic.agent_id == agent_id)
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 
-    async def count_rejected_topics(self) -> int:
+    async def count_rejected_topics(self, agent_id: uuid.UUID | None = None) -> int:
         stmt = select(func.count(RejectedTopic.id))
+        if agent_id:
+            stmt = stmt.join(Topic).where(Topic.agent_id == agent_id)
         result = await self.session.execute(stmt)
         return result.scalar() or 0

@@ -1,6 +1,7 @@
 """Memory Engine for checking historical posts, covered topics, and deduplication."""
 
 from dataclasses import dataclass
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.topic import TopicStatus
 from app.repositories.post_repository import PostRepository
@@ -33,10 +34,11 @@ class MemoryEngine:
         title: str,
         summary: str,
         url: str,
+        agent_id: uuid.UUID,
     ) -> SimilarityCheckResult:
         """Check if topic URL, title, or summary closely matches previously PUBLISHED topics or posts."""
         # 1. Check exact URL match against PUBLISHED topics
-        existing_topic = await self.topic_repo.get_by_url(url)
+        existing_topic = await self.topic_repo.get_by_url(url, agent_id)
         if existing_topic and existing_topic.status == TopicStatus.PUBLISHED:
             return SimilarityCheckResult(
                 is_similar=True,
@@ -47,7 +49,7 @@ class MemoryEngine:
         new_text = f"{title} {summary}"
 
         # 2. Check recent published posts
-        posts = await self.post_repo.get_all_recent_posts(limit=100)
+        posts = await self.post_repo.get_recent_posts_by_agent(agent_id, limit=100)
         for post in posts:
             score = calculate_similarity(new_text, post.text)
             if score >= self.similarity_threshold:
@@ -58,7 +60,7 @@ class MemoryEngine:
                 )
 
         # 3. Check recently published topics
-        recent_topics = await self.topic_repo.list_recent_topics(limit=100)
+        recent_topics = await self.topic_repo.list_recent_topics(limit=100, agent_id=agent_id)
         for topic in recent_topics:
             if topic.status == TopicStatus.PUBLISHED:
                 topic_text = f"{topic.title} {topic.summary}"
@@ -76,7 +78,7 @@ class MemoryEngine:
             matched_text=None,
         )
 
-    async def get_recent_posts_context(self, limit: int = 5) -> list[str]:
+    async def get_recent_posts_context(self, agent_id: uuid.UUID, limit: int = 5) -> list[str]:
         """Fetch recent post texts to pass as context to LLM prompt builder."""
-        posts = await self.post_repo.get_all_recent_posts(limit=limit)
+        posts = await self.post_repo.get_recent_posts_by_agent(agent_id, limit=limit)
         return [p.text for p in posts]
