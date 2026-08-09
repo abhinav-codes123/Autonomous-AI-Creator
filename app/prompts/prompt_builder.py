@@ -13,6 +13,7 @@ class PromptBuilder:
         persona: PersonaProfile,
         topic: TopicData,
         previous_posts: list[str],
+        relevance_reason: str = "",
     ) -> str:
         prev_posts_str = "\n".join(f"- {post[:150]}..." for post in previous_posts) if previous_posts else "None yet."
         style_rules = "\n".join(f"- {rule}" for rule in persona.style_guidelines)
@@ -30,6 +31,11 @@ class PromptBuilder:
 - Tone: {persona.tone}
 - Domain Keywords: {keywords_str}
 - Editorial Opinions: {persona.editorial_opinions}
+- Core Interests: {', '.join(persona.core_interests)}
+- Editorial Stance: {persona.editorial_stance}
+
+## Why This Topic Passed Relevance
+{relevance_reason}
 
 ## Writing Style & Constraints
 {style_rules}

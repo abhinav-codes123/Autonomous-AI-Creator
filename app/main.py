@@ -20,6 +20,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Create database tables if they do not exist
     async with engine.begin() as conn:
+        if settings.RESET_DATABASE_ON_INIT:
+            logger.warning("DEVELOPMENT ONLY: Database reset on init.")
+            await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
     # Start background scheduler

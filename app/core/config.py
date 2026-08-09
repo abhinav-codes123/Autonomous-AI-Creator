@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Editorial & Memory Thresholds
     EDITORIAL_MIN_SCORE: float = 20.0
     MEMORY_SIMILARITY_THRESHOLD: float = 0.65
+    
+    RESET_DATABASE_ON_INIT: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
