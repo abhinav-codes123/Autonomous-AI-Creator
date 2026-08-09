@@ -27,14 +27,21 @@ function Sidebar({ persona, isDemo }) {
         </div>
       </div>
 
-      <div className="sidebar__agent">
-        <p className="sidebar__agent-label">Agent Identity</p>
-        <p className="sidebar__agent-name">{persona.name.toUpperCase()}</p>
-        <p className="sidebar__agent-domain">{persona.domain.toUpperCase()}</p>
-        <StatusBadge label="ONLINE" variant="green" pulse />
-        {isDemo && (
-          <span className="sidebar__demo-tag">DEMO MODE</span>
-        )}
+      <div className="sidebar__agent persona-card">
+        <div className="persona-card__avatar">
+          {persona.name.charAt(0).toUpperCase()}
+        </div>
+        <div className="persona-card__info">
+          <p className="sidebar__agent-label">Agent Identity</p>
+          <p className="sidebar__agent-name">{persona.name.toUpperCase()}</p>
+          <p className="sidebar__agent-domain">{persona.domain.toUpperCase()}</p>
+        </div>
+        <div className="persona-card__status">
+          <StatusBadge label="ONLINE" variant="green" pulse />
+          {isDemo && (
+            <span className="sidebar__demo-tag">DEMO MODE</span>
+          )}
+        </div>
       </div>
 
       <nav className="sidebar__nav" aria-label="Dashboard navigation">
