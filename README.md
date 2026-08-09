@@ -178,6 +178,47 @@ Run the automated test suite covering API routes, discovery providers, editorial
 
 ---
 
+## Deployment to Render
+
+### 1. Create PostgreSQL Database on Render
+1. Go to your [Render Dashboard](https://dashboard.render.com/) and click **New +** → **PostgreSQL**.
+2. Set a name (e.g. `autonomous-ai-db`) and select the Free instance tier.
+3. Click **Create Database**.
+4. Once created, copy the **Internal Database URL** (or External Database URL if deploying from outside Render's network).
+
+### 2. Create Web Service on Render
+1. In Render Dashboard, click **New +** → **Web Service**.
+2. Connect your GitHub repository: `abhinav-codes123/Autonomous-AI-Creator`.
+3. Select **Python** as the runtime.
+
+### 3. Configure Build & Start Commands
+- **Build Command**:
+  ```bash
+  pip install -r requirements.txt && alembic upgrade head
+  ```
+- **Start Command**:
+  ```bash
+  uvicorn app.main:app --host 0.0.0.0 --port $PORT
+  ```
+
+### 4. Configure Environment Variables
+In the Web Service **Environment** section, add the following variables:
+
+| Key | Example / Value | Description |
+|---|---|---|
+| `DATABASE_URL` | `postgres://user:pass@ep-host.render.com/dbname` | Render PostgreSQL Connection String (automatically converted to `postgresql+asyncpg://` by backend) |
+| `LLM_PROVIDER` | `mock` or `openai` | Set to `mock` for free offline mode, or `openai` for OpenAI API |
+| `OPENAI_API_KEY` | `sk-...` | Optional if using `LLM_PROVIDER=openai` |
+| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI Model selection |
+| `SCHEDULER_INTERVAL_MINUTES` | `1` | Interval between autonomous background cycles in minutes |
+
+### 5. Health Check & API Verification
+- **Health Check Endpoint**: `GET /health` (returns `{"status": "ok", "project": "Autonomous AI Persona Backend"}`)
+- **Agent Initialization**: `POST /api/agent/init`
+- **Agent Feed Monitoring**: `GET /api/agent/feed?agentId=<agentId>`
+
+---
+
 ## License
 
 Developed for the ABTalks Vibe Code Hackathon (PS3 — Autonomous AI Creator).
