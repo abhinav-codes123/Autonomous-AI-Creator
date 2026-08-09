@@ -34,10 +34,15 @@ class MemoryEngine:
         title: str,
         summary: str,
         url: str,
-        agent_id: uuid.UUID,
+        agent_id: uuid.UUID | None = None,
     ) -> SimilarityCheckResult:
         """Check if topic URL, title, or summary closely matches previously PUBLISHED topics or posts."""
-        # 1. Check exact URL match against PUBLISHED topics
+        # Production callers must supply an agent ID. The optional value only
+        # preserves compatibility with the original standalone utility API.
+        if agent_id is None:
+            return await self._check_legacy_similarity(title, summary, url)
+
+        # 1. Check exact URL match against this agent's PUBLISHED topics
         existing_topic = await self.topic_repo.get_by_url(url, agent_id)
         if existing_topic and existing_topic.status == TopicStatus.PUBLISHED:
             return SimilarityCheckResult(
@@ -48,18 +53,9 @@ class MemoryEngine:
 
         new_text = f"{title} {summary}"
 
-        # 2. Check recent published posts
-        posts = await self.post_repo.get_recent_posts_by_agent(agent_id, limit=100)
-        for post in posts:
-            score = calculate_similarity(new_text, post.text)
-            if score >= self.similarity_threshold:
-                return SimilarityCheckResult(
-                    is_similar=True,
-                    similarity_score=score,
-                    matched_text=post.text[:100],
-                )
-
-        # 3. Check recently published topics
+        # 2. Check recently published topics.  Topic titles and summaries are
+        # stable memory signals; generated post prose contains persona boilerplate
+        # and would incorrectly suppress unrelated stories in the same domain.
         recent_topics = await self.topic_repo.list_recent_topics(limit=100, agent_id=agent_id)
         for topic in recent_topics:
             if topic.status == TopicStatus.PUBLISHED:
@@ -77,6 +73,21 @@ class MemoryEngine:
             similarity_score=0.0,
             matched_text=None,
         )
+
+    async def _check_legacy_similarity(
+        self, title: str, summary: str, url: str
+    ) -> SimilarityCheckResult:
+        """Compatibility helper for direct utility callers without an agent.
+
+        Scheduled publishing never uses this path; all of its memory reads are
+        scoped to the publishing agent.
+        """
+        new_text = f"{title} {summary}"
+        for post in await self.post_repo.get_all_recent_posts(limit=100):
+            score = calculate_similarity(new_text, post.text)
+            if score >= self.similarity_threshold:
+                return SimilarityCheckResult(True, score, post.text[:100])
+        return SimilarityCheckResult(False, 0.0)
 
     async def get_recent_posts_context(self, agent_id: uuid.UUID, limit: int = 5) -> list[str]:
         """Fetch recent post texts to pass as context to LLM prompt builder."""

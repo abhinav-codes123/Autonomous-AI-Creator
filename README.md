@@ -78,6 +78,15 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+For an existing development database created before agent-scoped topics, migrate
+it before starting the server:
+
+```bash
+alembic upgrade head
+# or, for disposable development data only:
+python scripts/reset_database.py
+```
+
 The API will be live at `http://localhost:8000`. OpenAPI documentation is available at `http://localhost:8000/docs`.
 
 ### 2. Frontend Setup

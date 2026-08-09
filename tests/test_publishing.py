@@ -1,12 +1,29 @@
 """End-to-end tests for Publishing Service and Autonomous Cycle."""
 
 import pytest
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.topic import TopicStatus
 from app.repositories.agent_repository import AgentRepository
 from app.repositories.post_repository import PostRepository
 from app.repositories.topic_repository import TopicRepository
 from app.services.publishing.publishing_service import PublishingService
+from app.services.discovery.base import TopicData, TopicProvider
+
+
+class StaticTopicProvider(TopicProvider):
+    """Keeps this publishing test deterministic and independent of the network."""
+
+    async def fetch_topics(self) -> list[TopicData]:
+        return [
+            TopicData(
+                title="AI Security Prompt Injection Research Update",
+                summary="Researchers report a new prompt injection weakness in large language model tooling.",
+                url="https://example.com/test/prompt-injection-research",
+                published_time=datetime.now(timezone.utc),
+                source_name="arXiv",
+            )
+        ]
 
 
 @pytest.mark.asyncio
@@ -16,7 +33,7 @@ async def test_publishing_service_end_to_end(db_session: AsyncSession):
     agent = await agent_repo.create(name="Ada", domain="AI Security")
 
     # 2. Instantiate Publishing Service
-    service = PublishingService(session=db_session)
+    service = PublishingService(session=db_session, providers=[StaticTopicProvider()])
 
     # 3. Run autonomous cycle
     posts = await service.run_autonomous_cycle(agent_id=agent.id)

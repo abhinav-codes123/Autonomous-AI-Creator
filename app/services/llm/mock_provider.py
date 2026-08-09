@@ -34,7 +34,7 @@ class MockLLMProvider(LLMProvider):
         topic_analysis = self._analyze_topic(clean_title, summary, domain)
         
         text = (
-            f"{topic_analysis['hook']}\n\n"
+            f"{topic_analysis['voice']}\n\n{topic_analysis['hook']}\n\n"
             f"{topic_analysis['analysis']}\n\n"
             f"{topic_analysis['takeaway']}"
         )
@@ -61,6 +61,13 @@ class MockLLMProvider(LLMProvider):
         # Use the actual title and summary to build specific commentary
         title_lower = title.lower()
         summary_text = summary if summary else title
+        domain_lower = domain.lower()
+        if "security" in domain_lower:
+            voice = "Threat Analysis & Security Brief"
+        elif "infrastructure" in domain_lower:
+            voice = "System Architecture Analysis"
+        else:
+            voice = f"{domain} Technical Brief"
         
         # Determine the nature of the topic for varied hook styles
         hook_variants = [
@@ -94,6 +101,7 @@ class MockLLMProvider(LLMProvider):
         )
         
         return {
+            'voice': voice,
             'hook': hook,
             'analysis': analysis,
             'takeaway': takeaway,

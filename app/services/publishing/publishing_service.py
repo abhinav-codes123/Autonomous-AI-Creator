@@ -1,5 +1,6 @@
 """Publishing Service for orchestrating the autonomous content creation pipeline."""
 
+import asyncio
 from datetime import datetime, timezone
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,24 +24,6 @@ from app.services.memory.memory_engine import MemoryEngine
 from app.services.persona.persona_engine import PersonaEngine
 from app.services.publishing.post_validator import PostValidator
 from app.utils.text_similarity import calculate_similarity
-
-
-class FallbackTopicProvider(TopicProvider):
-    """Fallback topic provider for offline or restricted environments."""
-
-    def __init__(self, domain: str = "AI Security") -> None:
-        self.domain = domain
-
-    async def fetch_topics(self) -> list[TopicData]:
-        return [
-            TopicData(
-                title=f"New Prompt Injection and Model Jailbreaks Research in {self.domain}",
-                summary=f"Empirical study analyzing Prompt Injection, Red Teaming, and CVEs in LLM systems for {self.domain}.",
-                url=f"https://arxiv.org/abs/2401.{uuid.uuid4().hex[:6]}",
-                published_time=datetime.now(timezone.utc),
-                source_name="arXiv",
-            )
-        ]
 
 
 class PublishingService:
@@ -72,14 +55,14 @@ class PublishingService:
 
     async def run_autonomous_cycle(self, agent_id: uuid.UUID | None = None) -> list[Post]:
         """Runs a complete autonomous cycle for active agent(s)."""
-        logger.info("Starting autonomous content generation cycle...")
+        logger.info("[SCHEDULER] Starting autonomous content generation cycle")
 
-        # 1. Fetch target agent(s)
+        # 1. Fetch target active agent(s)
         if agent_id:
             agent = await self.agent_repo.get_by_id(agent_id)
-            agents = [agent] if agent else []
+            agents = [agent] if (agent and agent.is_active) else []
         else:
-            agents = list(await self.agent_repo.list_all())
+            agents = list(await self.agent_repo.list_active())
 
         if not agents:
             logger.warning("No active agents found for autonomous cycle.")
@@ -95,28 +78,31 @@ class PublishingService:
             except Exception as e:
                 logger.error(f"Error during autonomous cycle for agent {agent.id}: {e}", exc_info=True)
 
-        logger.info(f"Autonomous cycle completed. Created {len(published_posts)} posts.")
+        logger.info(f"[SCHEDULER] Cycle completed. Created {len(published_posts)} post(s).")
         return published_posts
 
     async def _run_cycle_for_agent(self, agent: Agent) -> Post | None:
         persona = self.persona_engine.build_profile(agent.name, agent.domain)
 
-        # Step 1: Discover Topics from all providers
+        # Step 1: Discover Topics from all providers concurrently
         all_discovered: list[TopicData] = []
-        for provider in self.providers:
-            try:
-                topics = await provider.fetch_topics()
-                all_discovered.extend(topics)
-            except Exception as e:
-                logger.warning(f"Provider {provider.__class__.__name__} failed: {e}")
+        provider_results = await asyncio.gather(
+            *[provider.fetch_topics() for provider in self.providers],
+            return_exceptions=True,
+        )
+        for provider, res in zip(self.providers, provider_results):
+            if isinstance(res, Exception):
+                logger.warning(f"Provider {provider.__class__.__name__} failed: {res}")
+            elif isinstance(res, list):
+                all_discovered.extend(res)
 
-        # If network/external providers returned no topics, use fallback provider
+        # A failed discovery cycle must not manufacture a topic just to produce a
+        # post. The next scheduled run will retry the live providers.
         if not all_discovered:
-            logger.info("External providers returned no topics. Using fallback topic provider.")
-            fallback = FallbackTopicProvider(domain=agent.domain)
-            all_discovered = await fallback.fetch_topics()
+            logger.info(f"[DISCOVERY] No live topics discovered for agent {agent.id}.")
+            return None
 
-        logger.info(f"Discovered {len(all_discovered)} potential topics.")
+        logger.info(f"[DISCOVERY] Discovered {len(all_discovered)} topics for agent {agent.id}.")
 
         # Multi-Source Clustering: Map duplicate stories across providers to aggregate sources
         source_clusters: dict[str, list[str]] = {}
@@ -133,7 +119,7 @@ class PublishingService:
             if not cluster_found:
                 source_clusters[topic.url] = [topic.url]
 
-        scored_candidates: list[tuple[TopicData, float, list[str]]] = []
+        scored_candidates: list[tuple[TopicData, float, list[str], str]] = []
 
         # Step 2 & 3: Relevance Check & Editorial Filtering & Memory Similarity Check
         for topic_data in all_discovered:
@@ -160,6 +146,12 @@ class PublishingService:
                 url=topic_data.url,
                 agent_id=agent.id,
             )
+
+            # An exact previously published URL is already durable publishing
+            # memory. Do not modify it or create rejection memory for it.
+            if sim_result.is_similar and sim_result.similarity_score == 1.0:
+                logger.info(f"[MEMORY] Skipping previously published topic: {topic_data.title}")
+                continue
 
             # Editorial Evaluation
             editorial_score = self.editorial_engine.evaluate_topic(
@@ -195,7 +187,7 @@ class PublishingService:
         # Pick top scoring candidate topic
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
         best_topic, best_score, aggregated_sources, relevance_reason = scored_candidates[0]
-        logger.info(f"Selected best topic for post generation: '{best_topic.title}' (score: {best_score})")
+        logger.info(f"[EDITORIAL] Selected topic: '{best_topic.title}' (score: {best_score})")
 
         # Step 4: Fetch recent posts for memory context & construct prompt
         previous_posts = await self.memory_engine.get_recent_posts_context(agent_id=agent.id, limit=5)
@@ -243,5 +235,5 @@ class PublishingService:
         if db_topic:
             await self.topic_repo.mark_published(db_topic)
 
-        logger.info(f"Successfully published post {post.id} for agent {agent.name}.")
+        logger.info(f"[PUBLISH] Created post: {post.id} for agent {agent.id}")
         return post

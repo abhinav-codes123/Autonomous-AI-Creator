@@ -103,9 +103,9 @@ class PersonaRelevanceService:
         # Decision
         if score >= self.min_relevance_score:
             reason_str = "; ".join(reasons) if reasons else "General technology relevance"
-            logger.info(f"RELEVANT (score={score}): '{topic.title[:60]}' — {reason_str}")
+            logger.info(f"RELEVANT (score={score}): '{topic.title[:60]}' - {reason_str}")
             return RelevanceResult(relevant=True, score=score, reason=reason_str)
         else:
             reason_str = f"No substantive connection to {persona.domain}. " + ("; ".join(reasons) if reasons else "No matching signals found.")
-            logger.info(f"IRRELEVANT (score={score}): '{topic.title[:60]}' — {reason_str}")
+            logger.info(f"IRRELEVANT (score={score}): '{topic.title[:60]}' - {reason_str}")
             return RelevanceResult(relevant=False, score=score, reason=reason_str)
