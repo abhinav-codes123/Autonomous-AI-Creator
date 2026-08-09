@@ -251,6 +251,33 @@ function App() {
               </div>
             ) : (
               <form className="connect-agent__form" onSubmit={handleInitialize}>
+                <div className="connect-agent__presets">
+                  <p className="presets-label">Recommended Roles for Judges:</p>
+                  <div className="presets-list">
+                    <button 
+                      type="button" 
+                      className="preset-btn"
+                      onClick={() => { setPersonaName('Ada'); setPersonaDomain('AI Security'); }}
+                    >
+                      🛡️ AI Security
+                    </button>
+                    <button 
+                      type="button" 
+                      className="preset-btn"
+                      onClick={() => { setPersonaName('Alan'); setPersonaDomain('Quantum Computing'); }}
+                    >
+                      ⚛️ Quantum Computing
+                    </button>
+                    <button 
+                      type="button" 
+                      className="preset-btn"
+                      onClick={() => { setPersonaName('Grace'); setPersonaDomain('DevOps'); }}
+                    >
+                      ⚙️ DevOps
+                    </button>
+                  </div>
+                </div>
+
                 <div className="connect-agent__field">
                   <label htmlFor="persona-name">Persona Name</label>
                   <input
